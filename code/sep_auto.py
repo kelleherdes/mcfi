@@ -15,9 +15,10 @@ def cuda_mask(matrix, width, output, pad):
             result += matrix[y + i, x + j]
     output[y, x] = result
 
+
 def mask(matrix, width):
     #find padding for matrix based on kernel width
-    pad = int((width - (width % 2))/2)
+    pad = int(width / 2)
     #add padding to border of matrix
     padded_matrix = np.zeros((matrix.shape[0] +  2 * pad, matrix.shape[1] + 2 * pad))
     padded_matrix[pad : -pad, pad: -pad] = matrix
@@ -40,14 +41,25 @@ def generate_ac_tensor(current_frame, last_frame, next_frame, ak_width, k_width,
         shifted = np.roll(shifted, -Q[i, 1], axis = 1)
         result = np.multiply(current_frame, shifted)
         ac_tensor[:, :, i] = mask(result, ak_width)
+        # ac_tensor[:, :, i] = shift_multiply(last_frame, current_frame, ak_width, Q[i])
 
     for i in tqdm(range(0, Q.shape[0])):
         shifted = np.roll(next_frame, -Q[i, 0], axis = 0)
         shifted = np.roll(shifted, -Q[i, 1], axis = 1)
         result = np.multiply(current_frame, shifted)
         ac_tensor[:, :, Q.shape[0] + i] = mask(result, ak_width)
+        #ac_tensor[:, :, Q.shape[0] + i] = shift_multiply(next_frame, current_frame, ak_width, Q[i])
     return ac_tensor
 
+def ac_tensor_uni(image1, image2, ak_width, k_width, Q, b):
+    ac_tensor = np.zeros((image1.shape[0], image1.shape[1], Q.shape[0]), dtype = np.int32)
+    #print("Calculating second autocorrelation tensor...")
+    for i in tqdm(range(0, Q.shape[0])):
+        shifted = np.roll(image1, -Q[i, 0], axis = 0)
+        shifted = np.roll(shifted, -Q[i, 1], axis = 1)
+        result = np.multiply(image2, shifted)
+        ac_tensor[:, :, i] = mask(result, ak_width)
+    return ac_tensor
 
 def generate_toeplitz(image1, image2, ak_width, k_width, Q, b):
     ac_tensor = np.zeros((image1.shape[0], image1.shape[1], Q.shape[0]), dtype = np.int32)
