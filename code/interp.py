@@ -88,8 +88,8 @@ def calc_a_motion(x1, x2, Q, toeplitz1, toeplitz2, toeplitz3, autocor1, autocor2
             offset = Q[j] - Q[i]
             C[i, j]                           = toeplitz1[x1 + Q[i, 0] - mvs1[x1, x2, 0], x2 + Q[i, 1] - mvs1[x1, x2, 1], q_d[(offset[0], offset[1])]]
             C[j, i + q_len] = C[i + q_len, j] = toeplitz2[x1 + Q[i, 0] - mvs2[x1, x2, 0], x2 + Q[i, 1] - mvs2[x1, x2, 1], \
-                 qt_d[(int(offset[0] + mvs3[x1, x2, 0] + mvs2[x1, x2, 0]),\
-                       int(offset[1] + mvs3[x1, x2, 1] + mvs2[x1, x2, 1]))]]
+                 qt_d[(int(offset[0] - mvs1[x1, x2, 0] + mvs2[x1, x2, 0]),\
+                       int(offset[1] - mvs1[x1, x2, 1] + mvs2[x1, x2, 1]))]]
             C[i + q_len, j + q_len]           = toeplitz3[x1 + Q[i, 0] - mvs2[x1, x2, 0], x2 + Q[i, 1] - mvs2[x1, x2, 1], q_d[(offset[0], offset[1])]]
     a = np.linalg.lstsq(C.astype(np.float32), c.astype(np.float32))[0]
     return a
