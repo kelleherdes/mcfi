@@ -16,7 +16,7 @@ def reverse_points(mvs):
     reverse_mvs = np.zeros(mvs.shape)
     for i in range(mvs.shape[0]):
         for j in range(mvs.shape[1]):
-            reverse_mvs[i - mvs[i, j, 0], j - mvs[i, j, 1]] = -mvs[i, j] 
+            reverse_mvs[i - mvs[i, j, 0], j - mvs[i, j, 1]] = mvs[i, j] 
     return reverse_mvs
 
 def get_psnr(image1, image2):
