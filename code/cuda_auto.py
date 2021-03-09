@@ -18,6 +18,7 @@ def cuda_c(I, Q, ac_off, mvs1, mvs2, b, c):
         c[y - b, x - b, k]  = r1  
         c[y - b, x - b, k + Q.shape[0]]  = r2 
         r1 = r2 = 0
+
 @cuda.jit
 def cuda_C(I, Q, ac_off, mvs1, mvs2, b, C):
     y, x = cuda.grid(2)
@@ -33,12 +34,12 @@ def cuda_C(I, Q, ac_off, mvs1, mvs2, b, C):
         for l in range(k, Q.shape[0]):
             for i in range(-ac_off, ac_off + 1):
                 for j in range(-ac_off, ac_off + 1):
-                    r1 += I[y + i + Q[k, 0] - mvs1[y, x, 0], x + j + Q[k, 1] - mvs1[y, x, 1], -1] * \
-                                             I[y + i + Q[l, 0] - mvs1[y, x, 0], x + j + Q[l, 1] - mvs1[y, x, 1], -1] 
-                    r2 += I[y + i + Q[k, 0] - mvs2[y, x, 0], x + j + Q[k, 1] - mvs2[y, x, 1], 1] * \
-                                                          I[y + i + Q[l, 0] - mvs1[y, x, 0], x + j + Q[l, 1] - mvs1[y, x, 1], -1]              
-                    r3 += I[y + i + Q[k, 0] - mvs2[y, x, 0], x + j + Q[k, 1] - mvs2[y, x, 1], 1] *\
-                                                                       I[y + i + Q[l, 0] - mvs2[y, x, 0], x + j + Q[l, 1] - mvs2[y, x, 1], 1]
+                    r1 += I[y + i + Q[k, 0] - mvs1[y, x, 0], x + j + Q[k, 1] - mvs1[y, x, 1], 0] * \
+                          I[y + i + Q[l, 0] - mvs1[y, x, 0], x + j + Q[l, 1] - mvs1[y, x, 1], 0] 
+                    r2 += I[y + i + Q[k, 0] - mvs2[y, x, 0], x + j + Q[k, 1] - mvs2[y, x, 1], 2] * \
+                          I[y + i + Q[l, 0] - mvs1[y, x, 0], x + j + Q[l, 1] - mvs1[y, x, 1], 0]              
+                    r3 += I[y + i + Q[k, 0] - mvs2[y, x, 0], x + j + Q[k, 1] - mvs2[y, x, 1], 2] *\
+                          I[y + i + Q[l, 0] - mvs2[y, x, 0], x + j + Q[l, 1] - mvs2[y, x, 1], 2]
             C[y - b, x - b, k, l] = C[y - b, x - b, l, k]   = r1
             C[y - b, x - b, k + Q.shape[0], l] =  C[y - b, x - b, l, k + Q.shape[0]] = r2
             C[y - b, x - b, k + Q.shape[0], l + Q.shape[0]] = C[y - b, x - b, l + Q.shape[0], k + Q.shape[0]] = r3
@@ -59,5 +60,5 @@ def get_C(I, Q, ac_off, mvs1, mvs2, b):
     bpg_x = int(np.ceil((I.shape[1] )/TPB[1]))
     BPG = (bpg_y, bpg_x)
     C = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0], 2 * Q.shape[0]))
-    cuda_c[BPG, TPB](I, Q, ac_off, mvs1, mvs2,b, C)
+    cuda_C[BPG, TPB](I, Q, ac_off, mvs1, mvs2, b, C)
     return C

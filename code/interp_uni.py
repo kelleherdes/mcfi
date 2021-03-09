@@ -10,6 +10,8 @@ from scipy import signal
 from sep_auto import generate_toeplitz, ac_tensor_uni
 from motion import motion_est
 import math
+from cuda_auto_uni import get_c, get_C
+
 
 def q_dict(Q):
     qd = typed.Dict.empty(key_type = types.UniTuple(types.int64, 2), value_type=types.int64, )
@@ -62,6 +64,7 @@ def calc_a_motion(x1, x2, Q, q_motion, toeplitz, autocor, q_d, q_md, k_width, mv
         for j in range(q_len):
             offset = Q[j] - Q[i]
             C[i, j] = toeplitz[int(x1 + Q[i, 0] - mvs[x1, x2, 0]), int(x2 + Q[i, 1] - mvs[x1, x2, 1]), q_d[(offset[0], offset[1])]]
+
     a = np.linalg.lstsq(C.astype(np.float32), c.astype(np.float32))[0]   
     return a
 
@@ -133,6 +136,7 @@ def estimate_frame(I1, I2, A, k_width, k_off, b):
                 mask = kernel_p * patch
                 predicted[i, j, channel] = np.sum(mask)
     return predicted
+
 def estimate_coefficients(I, toeplitz, autocor, Q, q_d, k_width, b):  
     A = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * k_width - 1))
     print("Estimating coefficients...")
@@ -149,6 +153,14 @@ def estimate_coefficients_motion(I, toeplitz, autocor, Q, q_motion, q_d, qm_d, k
             A[i, j] = calc_a_motion(i + b, j + b, Q, q_motion, toeplitz, autocor, q_d, qm_d, k_width, mvs)
     return A
 
+def estimate_coefficients_motion2(c_array, C_array):  
+    A = np.zeros(c_array.shape)
+    print("Estimating coefficients...")
+    for i in range(0, A.shape[0]):
+        for j in range(0, A.shape[1]):
+            A[i, j] = np.linalg.lstsq((C_array[i, j]).astype(np.float32), c_array[i,j].astype(np.float32))[0]
+    return A
+
 def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     #constants
     k_off  = int(k_width  / 2)
@@ -162,19 +174,25 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     q_d = q_dict(double_Q)
     i1 = I1[:, :, 1]
     i2 = I2[:, :, 1]
+    i_tensor = np.zeros((i1.shape[0], i2.shape[1], 2)).astype(np.int32)
+    i_tensor[:, :, 0] = i1
+    i_tensor[:, :, 1] = i2
     if(motion == 1):
         mvs = motion_est(i1, i2, b, max_motion)
-        q_motion = Q
-        qm_d = q_dict(generate_Q_auto(ac_size))
+        c_array = get_c(i_tensor, Q, int(ac_block/2), mvs, b)
+        C_array = get_C(i_tensor, Q, int(ac_block/2), mvs, b)
+        #q_motion = Q
+        #qm_d = q_dict(generate_Q_auto(ac_size))
     else:
         mvs = 0
 
     print("Generating toeplitzs")
-    toeplitz = generate_toeplitz(i1, i1, ac_block, k_width, double_Q, b)
+    #toeplitz = generate_toeplitz(i1, i1, ac_block, k_width, double_Q, b)
     if(motion):
-        autocor  = ac_tensor_uni(i1, i2, ac_block, k_width, generate_Q_auto(ac_size), b)
-        A = estimate_coefficients_motion(I2[:, :, 1], toeplitz, autocor, Q, q_motion, q_d, qm_d, k_width, b, mvs)
-        predicted = estimate_frame_motion(I1, I2, A, k_width, k_off, b, motion, mvs)
+        #autocor  = ac_tensor_uni(i1, i2, ac_block, k_width, generate_Q_auto(ac_size), b)
+        #A = estimate_coefficients_motion(I2[:, :, 1], toeplitz, autocor, Q, q_motion, q_d, qm_d, k_width, b, mvs)
+        A1 = estimate_coefficients_motion2(c_array, C_array)
+        predicted = estimate_frame_motion(I1, I2, A1, k_width, k_off, b, motion, mvs)
     else:
         autocor  = ac_tensor_uni(i1, i2, ac_block, k_width, Q, b)
         A = estimate_coefficients(I2[:, :, 1], toeplitz, autocor, Q, q_d, k_width, b)
@@ -200,8 +218,8 @@ def main():
         image1 = '../images/image0.png'
         image2 = '../images/image1.png'
         out = '../output/out.png'
-        k_width = 5
-        ac_block = 13
+        k_width = 7
+        ac_block = 11
         motion = 1
     print("Kernel size:", k_width)
     print("Autocorrelation kernel size:", ac_block)

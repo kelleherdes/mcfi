@@ -11,6 +11,7 @@ from sep_auto import generate_toeplitz, generate_ac_tensor, ac_tensor_uni
 from motion import motion_est
 import math
 from cuda_auto import get_c, get_C
+
 @jit(nopython=True)
 def reverse_points(mvs):
     reverse_mvs = np.zeros(mvs.shape)
@@ -97,7 +98,6 @@ def calc_a(x1, x2, Q, toeplitz1, toeplitz2, toeplitz3, autocor, q_d, k_width):
     #print(a.shape)
     return a
 
-
 @jit(nopython=True)
 def estimate_frame(I1, I2, A, k_width, k_off, b):
     #p is past, f is future
@@ -165,6 +165,7 @@ def estimate_frame_motion(I1, I2, A, k_width, k_off, b, mvs1, mvs2):
                 predicted[i, j, channel] = np.sum(mask)
     return predicted
 
+@jit(nopython=True)
 def estimate_coefficients_motion(c_array, C_array):  
     A = np.zeros(c_array.shape)
     print("Estimating coefficients...")
@@ -247,9 +248,7 @@ def main():
     
     print("Predicting frames")
     predicted = predict_frame(image1, image2, image3, k_width, ac_block, motion)
-    print("PSNR1 is :", get_psnr(cv2.imread(image1), predicted))
-    print("PSNR2 is :", get_psnr(cv2.imread(image2), predicted))
-    print("PSNR3 is :", get_psnr(cv2.imread(image3), predicted))
+    print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
     if(cv2.imwrite(out, predicted) == False):
         print("Error writing file!")
     else:
