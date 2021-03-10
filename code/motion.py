@@ -28,8 +28,8 @@ def cuda_block(I1, I2, points, b, max_motion):
                 dy        = i
                 dx        = j
             d = 0
-    points[y, x, 0] = -dy
-    points[y, x, 1] = -dx
+    points[y, x, 0] = dy
+    points[y, x, 1] = dx
     
 def motion_est(i1, i2, b, max_):
     TPB = (16, 16)
@@ -46,13 +46,6 @@ def motion_est(i1, i2, b, max_):
     cuda_block[BPG, TPB](I1, I2, points, b, max_)
     return points.astype(np.int64)
 
-@jit(nopython=True)
-def bilinear(image, points, b):
-    output = np.zeros((image.shape[0] - 2 * b, image.shape[1] - 2 * b, 3))
-    for i in range(0, output.shape[0]):
-        for j in range(0, output.shape[1]):
-            output[i, j] = image[int(i - points[i,j,0]), int(j - points[i,j,1])] 
-    return output
 
 def main():
     i1 = cv2.imread('soccer/image0.png')

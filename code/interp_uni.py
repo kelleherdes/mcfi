@@ -60,10 +60,10 @@ def calc_a_motion(x1, x2, Q, q_motion, toeplitz, autocor, q_d, q_md, k_width, mv
     c = np.zeros(q_len)
     C = np.zeros((q_len, q_len))
     for i in range(q_len):
-        c[i] = autocor[x1, x2, q_md[(int(q_motion[i, 0] - mvs[x1, x2, 0]), int(q_motion[i, 1] - mvs[x1, x2, 1]))]]
+        c[i] = autocor[x1, x2, q_md[(int(q_motion[i, 0] + mvs[x1, x2, 0]), int(q_motion[i, 1] + mvs[x1, x2, 1]))]]
         for j in range(q_len):
             offset = Q[j] - Q[i]
-            C[i, j] = toeplitz[int(x1 + Q[i, 0] - mvs[x1, x2, 0]), int(x2 + Q[i, 1] - mvs[x1, x2, 1]), q_d[(offset[0], offset[1])]]
+            C[i, j] = toeplitz[int(x1 + Q[i, 0] + mvs[x1, x2, 0]), int(x2 + Q[i, 1] + mvs[x1, x2, 1]), q_d[(offset[0], offset[1])]]
 
     a = np.linalg.lstsq(C.astype(np.float32), c.astype(np.float32))[0]   
     return a
@@ -103,8 +103,8 @@ def estimate_frame_motion(I1, I2, A, k_width, k_off, b, motion, mvs):
                 y = i + b
                 x = j + b
                 if(motion == 1):
-                    y -= mvs[i + b, j + b, 0]
-                    x -= mvs[i + b, j + b, 1]
+                    y += mvs[i + b, j + b, 0]
+                    x += mvs[i + b, j + b, 1]
            
                 patch = I1[y - k_off: y + k_off + 1, x - k_off: x + k_off + 1, channel] 
                 mask = kernel_p * patch
@@ -158,7 +158,7 @@ def estimate_coefficients_motion2(c_array, C_array):
     print("Estimating coefficients...")
     for i in range(0, A.shape[0]):
         for j in range(0, A.shape[1]):
-            A[i, j] = np.linalg.lstsq((C_array[i, j]).astype(np.float32), c_array[i,j].astype(np.float32))[0]
+            A[i, j] = np.linalg.lstsq((C_array[i, j]).astype(np.float32), c_array[i, j].astype(np.float32))[0]
     return A
 
 def predict_frame_uni(image1, image2, k_width, ac_block, motion):
@@ -166,7 +166,6 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     k_off  = int(k_width  / 2)
     max_motion = 10
     b      = int(ac_block / 2) + int(k_width / 2) + max_motion
-    ac_size = k_width * int(1 + max_motion/k_off) - 1
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     Q = generate_Q(k_width)
@@ -212,7 +211,7 @@ def main():
         out = sys.argv[3]
         k_width = int(sys.argv[4])
         ac_block = int(sys.argv[5])
-        motion = int(sys.arg[6])
+        motion = int(sys.argv[6])
     
     else:
         image1 = '../images/image0.png'
