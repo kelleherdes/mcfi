@@ -78,17 +78,20 @@ def cuda_C(I, Q, ac_off, b, C):
         return None
     
     for k in range(0, Q.shape[0]):
-        for l in range(k, Q.shape[0]):
+        for l in range(0, Q.shape[0]):
             for i in range(-ac_off, ac_off + 1):
                 for j in range(-ac_off, ac_off + 1):
                     r1 += I[y + i + Q[k, 0], x + j + Q[k, 1], 0] * \
                           I[y + i + Q[l, 0], x + j + Q[l, 1], 0] 
-                    r2 += I[y + i + Q[k, 0], x + j + Q[k, 1], 2] * \
-                          I[y + i + Q[l, 0], x + j + Q[l, 1], 0]              
+
+                    r2 += I[y + i + Q[k, 0], x + j + Q[k, 1], 0] * \
+                          I[y + i + Q[l, 0], x + j + Q[l, 1], 2] 
+
                     r3 += I[y + i + Q[k, 0], x + j + Q[k, 1], 2] *\
                           I[y + i + Q[l, 0], x + j + Q[l, 1], 2]
+
             C[y - b, x - b, k, l] = C[y - b, x - b, l, k]   = r1
-            C[y - b, x - b, k + Q.shape[0], l] =  C[y - b, x - b, l, k + Q.shape[0]] = r2
+            C[y - b, x - b, k, l + Q.shape[0]] =  C[y - b, x - b, l + Q.shape[0], k] = r2
             C[y - b, x - b, k + Q.shape[0], l + Q.shape[0]] = C[y - b, x - b, l + Q.shape[0], k + Q.shape[0]] = r3
             r1 = r2 = r3 = 0
 
@@ -113,19 +116,19 @@ def get_C_m(I, Q, ac_off, mvs1, mvs2, b):
 
 
 def get_c(I, Q, ac_off, b):
-    TPB = (8, 8)
+    TPB = (16, 16)
     bpg_y = int(np.ceil((I.shape[0] )/TPB[0]))
     bpg_x = int(np.ceil((I.shape[1] )/TPB[1]))
     BPG = (bpg_y, bpg_x)
-    c = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0]))
+    c = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0])).astype(np.uint32)
     cuda_c[BPG, TPB](I, Q, ac_off, b, c)
     return c
 
 def get_C(I, Q, ac_off, b):
-    TPB = (8, 8)
+    TPB = (16, 16)
     bpg_y = int(np.ceil((I.shape[0] )/TPB[0]))
     bpg_x = int(np.ceil((I.shape[1] )/TPB[1]))
     BPG = (bpg_y, bpg_x)
-    C = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0], 2 * Q.shape[0]))
+    C = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0], 2 * Q.shape[0])).astype(np.uint32)
     cuda_C[BPG, TPB](I, Q, ac_off, b, C)
     return C

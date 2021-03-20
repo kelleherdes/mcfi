@@ -28,7 +28,7 @@ def cuda_C_m(I, Q, ac_off, mvs1, b, C):
         return None
     
     for k in range(0, Q.shape[0]):
-        for l in range(k, Q.shape[0]):
+        for l in range(0, Q.shape[0]):
             for i in range(-ac_off, ac_off + 1):
                 for j in range(-ac_off, ac_off + 1):
                     #y and x are the indices of the picture
@@ -45,7 +45,7 @@ def get_c_m(I, Q, ac_off, mvs1, b):
     bpg_x = int(np.ceil((I.shape[1])/TPB[1]))
     BPG = (bpg_y, bpg_x)
     c = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, Q.shape[0]), dtype = np.int32)
-    cuda_c[BPG, TPB](I, Q, ac_off, mvs1, b, c)
+    cuda_c_m[BPG, TPB](I, Q, ac_off, mvs1, b, c)
     return c
 
 def get_C_m(I, Q, ac_off, mvs1, b):
@@ -54,7 +54,7 @@ def get_C_m(I, Q, ac_off, mvs1, b):
     bpg_x = int(np.ceil((I.shape[1] )/TPB[1]))
     BPG = (bpg_y, bpg_x)
     C = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, Q.shape[0], Q.shape[0]), dtype = np.int32)
-    cuda_C[BPG, TPB](I, Q, ac_off, mvs1, b, C)
+    cuda_C_m[BPG, TPB](I, Q, ac_off, mvs1, b, C)
     return C
 
 ####################################################################################################
@@ -85,7 +85,7 @@ def cuda_C(I, Q, ac_off, b, C):
         return None
     
     for k in range(0, Q.shape[0]):
-        for l in range(k, Q.shape[0]):
+        for l in range(0, Q.shape[0]):
             for i in range(-ac_off, ac_off + 1):
                 for j in range(-ac_off, ac_off + 1):
                     #y and x are the indices of the picture
