@@ -92,7 +92,7 @@ def estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
                 kernel_p                   = np.zeros((k_width, k_width))
-                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                a_p                         = A[i, j, 0 : 2 * k_width - 1, c]
                 kernel_p[:, k_off]          = a_p[ 0 : k_width]
                 kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
                 kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
@@ -119,7 +119,7 @@ def estimate_frame(I1, A, k_width, k_off, b):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
                 kernel_p                   = np.zeros((k_width, k_width))
-                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                a_p                         = A[i, j, 0 : 2 * k_width - 1, c]
                 kernel_p[:, k_off]          = a_p[ 0 : k_width]
                 kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
                 kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
@@ -163,31 +163,56 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     k_off  = int(k_width  / 2)
     max_motion = 10
     b      = int(ac_block / 2) + int(k_width / 2) + max_motion
-    I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
-    I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
+    I1 = cv2.copyMakeBorder(cv2.cvtColor(cv2.imread(image1), cv2.COLOR_BGR2YUV), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
+    I2 = cv2.copyMakeBorder(cv2.cvtColor(cv2.imread(image2), cv2.COLOR_BGR2YUV), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     
     Q = generate_Q(k_width)
+    i_y = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_y[:, :, 0] = I1[:, :, 0]
+    i_y[:, :, 1] = I2[:, :, 0]
 
-    i_g = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
-    i_g[:, :, 0] = I1[:, :, 1]
-    i_g[:, :, 1] = I2[:, :, 1]
+    i_u = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_u[:, :, 0] = I1[:, :, 1]
+    i_u[:, :, 1] = I2[:, :, 1]
+
+    i_v = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_v[:, :, 0] = I1[:, :, 2]
+    i_v[:, :, 1] = I2[:, :, 2]
 
     
     if(motion == 1):
-        mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
-        c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
-        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
-        A_g = estimate_coefficients_motion2(c_g, C_g)
-        predicted = estimate_frame_motion(I1, A_g, k_width, k_off, b, motion, mvs)
+        mvs = motion_est(i_y[:, :, 0], i_y[:, :, 1], b, max_motion)
+        c_y = get_c_m(i_y, Q, int(ac_block/2), mvs, b)
+        c_u = get_c_m(i_u, Q, int(ac_block/2), mvs, b)
+        c_v = get_c_m(i_v, Q, int(ac_block/2), mvs, b)
+        C_y = get_C_m(i_y, Q, int(ac_block/2), mvs, b)
+        C_u = get_C_m(i_u, Q, int(ac_block/2), mvs, b)
+        C_v = get_C_m(i_v, Q, int(ac_block/2), mvs, b)
+        A_y = estimate_coefficients_motion2(c_y, C_y)
+        A_u = estimate_coefficients_motion2(c_u, C_u)
+        A_v = estimate_coefficients_motion2(c_v, C_v)
+        A = np.zeros((A_y.shape[0], A_y.shape[1], A_y.shape[2], 3))
+        A[:,:,:,0] = A_y
+        A[:,:,:,1] = A_u
+        A[:,:,:,2] = A_v
+        predicted = estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs)
     else:
-        c_g = get_c(i_g, Q, int(ac_block/2), b)
-        C_g = get_C(i_g, Q, int(ac_block/2), b)
-        A_g = estimate_coefficients_motion2(c_g, C_g)
-        predicted = estimate_frame(I1, A_g, k_width, k_off, b)
+        c_y = get_c(i_y, Q, int(ac_block/2), b)
+        c_u = get_c(i_u, Q, int(ac_block/2), b)
+        c_v = get_c(i_v, Q, int(ac_block/2), b)
+        C_y = get_C(i_y, Q, int(ac_block/2), b)
+        C_u = get_C(i_u, Q, int(ac_block/2), b)
+        C_v = get_C(i_v, Q, int(ac_block/2), b)
+        A_y = estimate_coefficients_motion2(c_y, C_y)
+        A_u = estimate_coefficients_motion2(c_u, C_u)
+        A_v = estimate_coefficients_motion2(c_v, C_v)
+        A = np.zeros((A_y.shape[0], A_y.shape[1], A_y.shape[2], 3))
+        A[:,:,:,0] = A_y
+        A[:,:,:,1] = A_u
+        A[:,:,:,2] = A_v
+        predicted = estimate_frame(I1, A, k_width, k_off, b)
 
-    with open('../kernel_output/kernel_uni.npy', 'ab') as k:
-		np.save(k, A_g)
-
+    predicted = cv2.cvtColor(predicted.astype(np.uint8), cv2.COLOR_YUV2BGR)
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
     return predicted
@@ -206,9 +231,9 @@ def main():
         image1 = '../images/image0.png'
         image2 = '../images/image1.png'
         out = '../output/out.png'
-        k_width = 51
-        ac_block = 51
-        motion = 0
+        k_width = 11
+        ac_block = 13
+        motion = 1
     print("Kernel size:", k_width)
     print("Autocorrelation kernel size:", ac_block)
     #kernel max offsets (the max index to be used)    

@@ -15,6 +15,7 @@ def main():
     with open("../sepconv/vertical.npy", 'rb') as v:
         v_prev = np.load(v)
         v_next = np.load(v)
+    print(h_prev.shape)
 
     
 if __name__ == "__main__":

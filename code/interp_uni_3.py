@@ -92,7 +92,7 @@ def estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
                 kernel_p                   = np.zeros((k_width, k_width))
-                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                a_p                         = A[i, j, 0 : 2 * k_width - 1, c]
                 kernel_p[:, k_off]          = a_p[ 0 : k_width]
                 kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
                 kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
@@ -119,7 +119,7 @@ def estimate_frame(I1, A, k_width, k_off, b):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
                 kernel_p                   = np.zeros((k_width, k_width))
-                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                a_p                         = A[i, j, 0 : 2 * k_width - 1, c]
                 kernel_p[:, k_off]          = a_p[ 0 : k_width]
                 kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
                 kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
@@ -167,26 +167,50 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     
     Q = generate_Q(k_width)
+    i_r = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_r[:, :, 0] = I1[:, :, 0]
+    i_r[:, :, 1] = I2[:, :, 0]
 
     i_g = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     i_g[:, :, 0] = I1[:, :, 1]
     i_g[:, :, 1] = I2[:, :, 1]
 
+    i_b = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_b[:, :, 0] = I1[:, :, 2]
+    i_b[:, :, 1] = I2[:, :, 2]
+
     
     if(motion == 1):
-        mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
+        mvs = motion_est(i_r[:, :, 0], i_r[:, :, 1], b, max_motion)
+        c_r = get_c_m(i_r, Q, int(ac_block/2), mvs, b)
         c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
+        c_b = get_c_m(i_b, Q, int(ac_block/2), mvs, b)
+        C_r = get_C_m(i_r, Q, int(ac_block/2), mvs, b)
         C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
+        C_b = get_C_m(i_b, Q, int(ac_block/2), mvs, b)
+        A_r = estimate_coefficients_motion2(c_r, C_r)
         A_g = estimate_coefficients_motion2(c_g, C_g)
-        predicted = estimate_frame_motion(I1, A_g, k_width, k_off, b, motion, mvs)
+        A_b = estimate_coefficients_motion2(c_b, C_b)
+        A = np.zeros((A_r.shape[0], A_r.shape[1], A_r.shape[2], 3))
+        A[:,:,:,0] = A_r
+        A[:,:,:,1] = A_g
+        A[:,:,:,2] = A_b
+        predicted = estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs)
     else:
+        c_r = get_c(i_r, Q, int(ac_block/2), b)
         c_g = get_c(i_g, Q, int(ac_block/2), b)
+        c_b = get_c(i_b, Q, int(ac_block/2), b)
+        C_r = get_C(i_r, Q, int(ac_block/2), b)
         C_g = get_C(i_g, Q, int(ac_block/2), b)
+        C_b = get_C(i_b, Q, int(ac_block/2), b)
+        A_r = estimate_coefficients_motion2(c_r, C_r)
         A_g = estimate_coefficients_motion2(c_g, C_g)
-        predicted = estimate_frame(I1, A_g, k_width, k_off, b)
-
-    with open('../kernel_output/kernel_uni.npy', 'ab') as k:
-		np.save(k, A_g)
+        A_b = estimate_coefficients_motion2(c_b, C_b)
+        A = np.zeros((A_r.shape[0], A_r.shape[1], A_r.shape[2], 3))
+        A[:,:,:,0] = A_r
+        A[:,:,:,1] = A_g
+        A[:,:,:,2] = A_b
+        predicted = estimate_frame(I1, A, k_width, k_off, b)
 
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
@@ -206,9 +230,9 @@ def main():
         image1 = '../images/image0.png'
         image2 = '../images/image1.png'
         out = '../output/out.png'
-        k_width = 51
-        ac_block = 51
-        motion = 0
+        k_width = 11
+        ac_block = 13
+        motion = 1
     print("Kernel size:", k_width)
     print("Autocorrelation kernel size:", ac_block)
     #kernel max offsets (the max index to be used)    

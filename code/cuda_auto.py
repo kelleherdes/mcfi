@@ -100,7 +100,7 @@ def get_c_m(I, Q, ac_off, mvs1, mvs2, b):
     bpg_y = int(np.ceil((I.shape[0] )/TPB[0]))
     bpg_x = int(np.ceil((I.shape[1] )/TPB[1]))
     BPG = (bpg_y, bpg_x)
-    c = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0]))
+    c = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * Q.shape[0])).astype(np.uint32)
     cuda_c_m[BPG, TPB](I, Q, ac_off, mvs1, mvs2, b, c)
     return c
 
