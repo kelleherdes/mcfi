@@ -185,8 +185,8 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
         A_g = estimate_coefficients_motion2(c_g, C_g)
         predicted = estimate_frame(I1, A_g, k_width, k_off, b)
 
-    with open('../kernel_output/kernel_uni.npy', 'ab') as k:
-		np.save(k, A_g)
+    with open('../kernel_output/kernel_uni.npy', 'wb') as k:
+	    np.save(k, A_g)
 
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
@@ -205,10 +205,11 @@ def main():
     else:
         image1 = '../images/image0.png'
         image2 = '../images/image1.png'
+        image3 = '../images/image2.png'
         out = '../output/out.png'
-        k_width = 51
-        ac_block = 51
-        motion = 0
+        k_width = 11
+        ac_block = 13
+        motion = 1
     print("Kernel size:", k_width)
     print("Autocorrelation kernel size:", ac_block)
     #kernel max offsets (the max index to be used)    

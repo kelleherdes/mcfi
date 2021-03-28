@@ -2,7 +2,7 @@ import numpy as np
 import os
 import cv2
 import matplotlib.pyplot as plt
-from interp import predict_frame
+from interp_2d import predict_frame
 from interp_uni import predict_frame_uni
 import math
 
@@ -98,11 +98,20 @@ def test(k_width, ac_block, motion, bi_direct):
 
 
 def main():
-    k_width = 3
-    ac_block = [5, 7, 9, 11]
-    motion = 1
     bi_direct = 1
+    k_width = 3
+    ac_block = [3, 5, 7, 9, 11]
+    # motion = 0
+    # test(k_width, ac_block, motion, bi_direct)
+    # motion = 1
+    # test(k_width, ac_block, motion, bi_direct)
+    motion = 0
+    k_width = 5
     test(k_width, ac_block, motion, bi_direct)
+    motion = 1
+    test(k_width, ac_block, motion, bi_direct)
+
+
    
 
 

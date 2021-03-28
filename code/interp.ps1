@@ -1,0 +1,16 @@
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 5 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 7 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 9 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 11 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 13 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 15 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 3 17 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 7 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 9 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 11 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 13 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 15 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 17 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 19 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 21 1
+python 3dar_interpolation_2.py ../images/image0.png ../images/image1.png ../images/image2.png ../output/out.png 5 23 1

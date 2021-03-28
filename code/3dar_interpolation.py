@@ -9,8 +9,8 @@ from tqdm import tqdm
 from scipy import signal
 from sep_auto import generate_toeplitz, generate_ac_tensor
 import math
-from motion import motion_est
-from cuda_auto_2d import get_c_m, get_C_m, get_c, get_C
+from motion import motion_est, motion_est2
+from cuda_auto_interp import get_c_m, get_C_m, get_c, get_C
 
 def get_psnr(image1, image2):
     mse = np.sum((image1 - image2) ** 2)/(image1.shape[0] * image2.shape[1])
@@ -75,20 +75,22 @@ def estimate_frame(I1, I2, A, k_width, k_off, b):
     return predicted
 
 @jit(nopython=True)
-def estimate_frame_motion(I1, I2, A, k_width, k_off, b, mvs1, mvs2):
-    predicted = np.zeros((A.shape[0], A.shape[1], 3))
+def estimate_frame_motion(I1, I2, A1, A2, k_width, k_off, b, mvs):
+    predicted = np.zeros((A1.shape[0], A1.shape[1], 3))
     #for each colour channel, use the corresponding AR coefficients to estimate future frame 
     for channel in range(0, 3):
-        for i in range(0, A.shape[0] ):
-            for j in range(0, A.shape[1] ):
-                kernel = A[i, j, :].reshape((2 * k_width,  k_width))
+        for i in range(0, A1.shape[0] ):
+            for j in range(0, A1.shape[1] ):
+                kernel_p = (A1[i, j, :]/np.sum(A1[i, j, :])).reshape((2 * k_width,  k_width))[:k_width]
+                kernel_f = (A2[i, j, :]/np.sum(A2[i, j, :])).reshape((2 * k_width,  k_width))[k_width:]
+                kernel = np.concatenate((kernel_p, kernel_f), axis = 0)
                 k_sum = np.sum(kernel)
                 if(k_sum != 0):
                    kernel = kernel/np.sum(kernel)
-                y1 = i + mvs1[i + b, j + b, 0]
-                x1 = j + mvs1[i + b, j + b, 1]
-                y2 = i + mvs2[i + b, j + b, 0]
-                x2 = j + mvs2[i + b, j + b, 1]
+                y1 = i + mvs[i + b, j + b, 0]
+                x1 = j + mvs[i + b, j + b, 1]
+                y2 = i - mvs[i + b, j + b, 0]
+                x2 = j - mvs[i + b, j + b, 1]
                 patch1 = I1[y1 + b - k_off: y1 + b + k_off + 1, x1 + b - k_off: x1 + b + k_off + 1 ,channel] 
                 patch2 = I2[y2 + b - k_off: y2 + b + k_off + 1, x2 + b - k_off: x2 + b + k_off + 1 ,channel]
                 patch = np.concatenate((patch1, patch2), axis = 0)
@@ -144,29 +146,28 @@ def estimate_coefficients_motion(c_array, C_array):
     return A
 
 def predict_frame(image1, image2, image3, k_width, ac_block, motion):
-    print("2D")
     k_off  = int(k_width  / 2)
     max_motion = 10
     b      = int(ac_block / 2) + int(k_width / 2) + max_motion
 
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
-    I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I3 = cv2.copyMakeBorder(cv2.imread(image3), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     
     Q = generate_Q(k_width)
 
     i_g = np.zeros((I1.shape[0], I1.shape[1], 3), dtype = np.int32)
     i_g[:, :, 0] = I1[:, :, 1]
-    i_g[:, :, 1] = I2[:, :, 1]
-    i_g[:, :, 2] = I3[:, :, 1]
+    i_g[:, :, 1] = I3[:, :, 1]
 
     if(motion):
-        mvs1 = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
-        mvs2 = motion_est(i_g[:, :, 2], i_g[:, :, 1], b, max_motion)
-        c_g = get_c_m(i_g, Q, int(ac_block/2), mvs1, mvs2, b)
-        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs1, mvs2, b)
-        A_g = estimate_coefficients_motion(c_g, C_g)
-        predicted = estimate_frame_motion(I1, I3, A_g, k_width, k_off, b, mvs1, mvs2)
+        mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
+        mvs = np.zeros(mvs.shape).astype(np.int64)
+        c_g0 = get_c_m(i_g, Q, int(ac_block/2), mvs, b, 0)
+        c_g1 = get_c_m(i_g, Q, int(ac_block/2), mvs, b, 1)
+        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
+        A1 = estimate_coefficients_motion(c_g0, C_g)
+        A2 = estimate_coefficients_motion(c_g1, C_g)
+        predicted = estimate_frame_motion(I1, I3, A1, A2, k_width, k_off, b, mvs)
     else:
         double_Q = generate_Q(2 * k_width - 1)
         q_d = q_dict(double_Q)
@@ -177,9 +178,8 @@ def predict_frame(image1, image2, image3, k_width, ac_block, motion):
         A_g = estimate_coefficients(I2[:, :, 1], toeplitz1_g, toeplitz2_g, toeplitz3_g, autocor_g, Q, q_d, k_width, b)
         predicted = estimate_frame(I1, I3, A_g, k_width, k_off, b)
 
-    with open('../kernel_output/kernel_bi_2d.npy', 'wb') as k:
-	    np.save(k, A_g)
-
+    # with open('../kernel_output/kernel_bi_2d.npy', 'wb') as k:
+	#     np.save(k, A_g)
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
     return predicted
@@ -207,9 +207,9 @@ else:
     image2 = '../images/image1.png'
     image3 = '../images/image2.png'
     out = '../output/out.png'
-    k_width = 5
+    k_width = 3
     interp_type = 0
-    ac_block = 7
+    ac_block = 15
 
 def main():
     print("Kernel size:", k_width)    

@@ -119,31 +119,21 @@ def main():
         with open('../kernel_output/kernel_bi.npy', 'rb') as a:
             A = np.load(a)
 
-    kernel_p                    = np.zeros((k_width, k_width))
-    kernel_f                    = np.zeros((k_width, k_width))
+    kernel_p                   = np.zeros((k_width, k_width))
     a_p                         = A[i, j, 0 : 2 * k_width - 1]
-    a_f                         = A[i, j, 2 * k_width - 1:]
     kernel_p[:, k_off]          = a_p[ 0 : k_width]
     kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
     kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
-    kernel_f[:, k_off]          = a_f[0 : k_width]
-    kernel_f[k_off, 0 : k_off ] = a_f[k_width : k_width + k_off]
-    kernel_f[k_off, k_off + 1:] = a_f[k_width + k_off:]
-
-    k_sum = np.sum(kernel_p + kernel_f)
-    niklaus_previous = np.outer(prev_h[ :, :, i, j], prev_v[:, :, i, j])
-    niklaus_next = np.outer(next_h[ :, :, i, j], next_v[ :, :, i, j])
-    print("Sum", np.sum(niklaus_previous - niklaus_next))
+    k_sum = np.sum(kernel_p)
     if(k_sum != 0):
         kernel_p = kernel_p/k_sum
-        kernel_f = kernel_f/k_sum
+    niklaus_previous = np.outer(prev_h[ :, :, i, j], prev_v[:, :, i, j])
+    niklaus_next = np.outer(next_h[ :, :, i, j], next_v[ :, :, i, j])
+
     kernel_p = cv2.copyMakeBorder(kernel_p, b, b, b, b, cv2.BORDER_CONSTANT)
-    kernel_f = cv2.copyMakeBorder(kernel_f, b, b, b, b, cv2.BORDER_CONSTANT)
     if(motion):
         kernel_p = np.roll(kernel_p, -mvs1[i, j, 0], axis = 0)
         kernel_p = np.roll(kernel_p, -mvs1[i, j, 1], axis = 1)
-        kernel_f = np.roll(kernel_f, -mvs2[i, j, 0], axis = 0)
-        kernel_f = np.roll(kernel_f, -mvs2[i, j, 1], axis = 0)
 
     skip=(slice(None, None, 2),slice(None,None,2))
     
@@ -169,11 +159,11 @@ def main():
     plt.quiver(X[skip], Y[skip], U1[skip], V1[skip], color = 'g', scale = 51)
 
     plt.figure()
-    plt.title("3DAR next")
-    plt.imshow(image3[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
-    plt.imshow(kernel_f, cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=0), alpha=0.5)
+    plt.title("Ground truth")
+    plt.imshow(image2[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
     plt.colorbar()
-    plt.quiver(X[skip], Y[skip], U2[skip], V2[skip], color = 'g', scale = 51)
+
+
 
     plt.show()
 
