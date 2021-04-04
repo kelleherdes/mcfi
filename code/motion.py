@@ -14,7 +14,7 @@ def cuda_block(I1, I2, points, b, max_motion):
         return None
     closest_d  = 10**10 + 0.5
     #max_motion = max_
-    mk_width   = 10
+    mk_width   = 17
     d          = 0
     dx         = 0
     dy         = 0
@@ -41,7 +41,7 @@ def bi_cuda_block(I1, I2, points, b, max_motion):
         return None
     closest_d  = 10**10 + 0.5
     #max_motion = max_
-    mk_width   = 21
+    mk_width   = 17
     d          = 0
     dx         = 0
     dy         = 0
@@ -65,9 +65,9 @@ def motion_est(i1, i2, b, max_):
     BPG = (bpg_y, bpg_x)
     assert(i1.shape == i2.shape)
     points = np.zeros((i1.shape[0], i1.shape[1], 2))
-    np.ascontiguousarray(points, dtype=np.int32)
-    I1 = np.copy(i1)
-    I2 = np.copy(i2)
+    np.ascontiguousarray(points, dtype=np.int16)
+    I1 = np.copy(i1).astype(np.uint8)
+    I2 = np.copy(i2).astype(np.uint8)
     #np.ascontiguousarray(I1, dtype=np.int32)
     #np.ascontiguousarray(I2, dtype=np.int32)
     cuda_block[BPG, TPB](I1, I2, points, b, max_)
@@ -80,9 +80,9 @@ def motion_est2(i1, i2, b, max_):
     BPG = (bpg_y, bpg_x)
     assert(i1.shape == i2.shape)
     points = np.zeros((i1.shape[0], i1.shape[1], 2))
-    np.ascontiguousarray(points, dtype=np.int32)
-    I1 = np.copy(i1)
-    I2 = np.copy(i2)
+    np.ascontiguousarray(points, dtype=np.int16)
+    I1 = np.copy(i1).astype(np.uint8)
+    I2 = np.copy(i2).astype(np.uint8)
     #np.ascontiguousarray(I1, dtype=np.int32)
     #np.ascontiguousarray(I2, dtype=np.int32)
     bi_cuda_block[BPG, TPB](I1, I2, points, b, max_)

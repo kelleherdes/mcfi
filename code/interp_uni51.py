@@ -209,9 +209,9 @@ def main():
         image2 = '../images/image1.png'
         image3 = '../images/image2.png'
         out = '../output/out.png'
-        k_width = 13
-        ac_block = 15
-        motion = 1
+        k_width = 51
+        ac_block =17
+        motion = 0
     print("Kernel size:", k_width)
     print("Using plus kernel and two frames...")
     predicted = predict_frame_uni(image1, image2, k_width, ac_block, motion)

@@ -219,15 +219,12 @@ def main():
         image2 = '../images/image1.png'
         image3 = '../images/image2.png'
         out = '../output/out.png'
-        k_width = 7
-        ac_block = 9
-        motion = 1
+        k_width = 51
+        ac_block = 23
+        motion = 0
 
     print("Kernel size:", k_width)
-    print("Autocorrelation kernel size:", ac_block)
-    #kernel max offsets (the max index to be used)
-    
-    print("Predicting frames")
+    print("Using plus kernel and two frames...")
     predicted = predict_frame(image1, image2, image3, k_width, ac_block, motion)
     print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
     if(cv2.imwrite(out, predicted) == False):

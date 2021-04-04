@@ -64,7 +64,7 @@ def ac_tensor_uni(image1, image2, ak_width, k_width, Q, b):
 def generate_toeplitz(image1, image2, ak_width, k_width, Q, b):
     ac_tensor = np.zeros((image1.shape[0], image1.shape[1], Q.shape[0]), dtype = np.int32)
     #print("Calculating Toeplitz tensor...")
-    #print("Size is: ", size/10 ** 9, "Gb")
+    print("Size is: ", ac_tensor.nbytes/10 ** 9, "Gb")
     for i in tqdm(range(0, Q.shape[0])):
         shifted = np.roll(image2, -Q[i, 0], axis = 0)
         shifted = np.roll(shifted, -Q[i, 1], axis = 1)

@@ -13,6 +13,7 @@ from motion import motion_est, motion_est2
 import math
 from cuda_auto_uni import get_c, get_C, get_c_m, get_C_m
 
+
 def edge_detect(image):
     sobel = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
     image_x = signal.convolve2d(image, sobel, mode = 'same')
@@ -73,14 +74,24 @@ def generate_Q(width):
 @jit(nopython=True)
 def estimate_frame_motion(I1, I2, A, A2, k_width, k_off, b, motion, mvs1, mvs2, mvs):
     #p is past, f is future
-    #k = 2
     predicted = np.zeros((A.shape[0], A.shape[1], 3))
     #for each colour channel, use the corresponding AR coefficients to estimate future frame 
     for c in range(0, 3):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
-                kernel_p = A[i, j].reshape((k_width, k_width)) 
-                kernel_f = A2[i, j].reshape((k_width, k_width)) 
+
+                kernel_p                   = np.zeros((k_width, k_width))
+                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                kernel_p[:, k_off]          = a_p[ 0 : k_width]
+                kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
+                kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
+
+                kernel_f                   = np.zeros((k_width, k_width))
+                a_f                         = A2[i, j, 0 : 2 * k_width - 1]
+                kernel_f[:, k_off]          = a_f[ 0 : k_width]
+                kernel_f[k_off, 0 : k_off ] = a_f[k_width : k_width + k_off]
+                kernel_f[k_off, k_off + 1:] = a_f[k_width + k_off:]
+
                 k_sum = np.sum(kernel_p + kernel_f)
                 if(k_sum != 0):
                    kernel_p = kernel_p/k_sum
@@ -106,31 +117,15 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
 
-    Q = generate_Q_auto(k_width)
+    Q = generate_Q(k_width)
 
     i_g = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     i_g[:, :, 0] = I1[:, :, 1]
     i_g[:, :, 1] = I2[:, :, 1]
 
-    # i_r = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
-    # i_r[:, :, 0] = I1[:, :, 0]
-    # i_r[:, :, 1] = I2[:, :, 0]
-
-    # i_b = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
-    # i_b[:, :, 0] = I1[:, :, 2]
-    # i_b[:, :, 1] = I2[:, :, 2]
-
     i_g2 = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     i_g2[:, :, 1] = I1[:, :, 1]
     i_g2[:, :, 0] = I2[:, :, 1]
-
-    # i_r2 = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
-    # i_r2[:, :, 1] = I1[:, :, 0]
-    # i_r2[:, :, 0] = I2[:, :, 0]
-
-    # i_b2 = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
-    # i_b2[:, :, 1] = I1[:, :, 2]
-    # i_b2[:, :, 0] = I2[:, :, 2]
 
     # i_g_edge = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     # i_g_edge[:, :, 0] = edge_detect(i_g[:, :, 0])
@@ -140,16 +135,11 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     # i_g_edge2[:, :, 1] = edge_detect(i_g[:, :, 0])
     # i_g_edge2[:, :, 0] = edge_detect(i_g[:, :, 1])
 
-    # i_g_edge[i_g_edge > 255] = 255
-    # i_g_edge2[i_g_edge2 > 255] = 255
-
-    
     if(motion == 1):
         mvs1 = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
         mvs2 = motion_est(i_g[:, :, 1], i_g[:, :, 0], b, max_motion)
         mvs = motion_est2(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
-        print("Motion estimated")
-        
+
     else:
         mvs1 = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
         mvs2 = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
@@ -159,46 +149,20 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     C_g = get_C_m(i_g, Q, int(ac_block/2), mvs1, b)
     A_g = estimate_coefficients_motion2(c_g, C_g)
 
-    # c_r = get_c_m(i_r, Q, int(ac_block/2), mvs1, b)
-    # C_r = get_C_m(i_r, Q, int(ac_block/2), mvs1, b)
-    # A_r = estimate_coefficients_motion2(c_r, C_r)
-
-    # c_b = get_c_m(i_b, Q, int(ac_block/2), mvs1, b)
-    # C_b = get_C_m(i_b, Q, int(ac_block/2), mvs1, b)
-    # A_b = estimate_coefficients_motion2(c_b, C_b)
-
     c_g2 = get_c_m(i_g2, Q, int(ac_block/2), mvs2, b)
     C_g2 = get_C_m(i_g2, Q, int(ac_block/2), mvs2, b)
     A_g2 = estimate_coefficients_motion2(c_g2, C_g2)
 
-    # c_r2 = get_c_m(i_r2, Q, int(ac_block/2), mvs2, b)
-    # C_r2 = get_C_m(i_r2, Q, int(ac_block/2), mvs2, b)
-    # A_r2 = estimate_coefficients_motion2(c_r2, C_r2)
-
-    # c_b2 = get_c_m(i_b2, Q, int(ac_block/2), mvs2, b)
-    # C_b2 = get_C_m(i_b2, Q, int(ac_block/2), mvs2, b)
-    # A_b2 = estimate_coefficients_motion2(c_b2, C_b2)
-
-    # A1 = np.zeros((3, A_g.shape[0], A_g.shape[1], A_g.shape[2]))
-    # A2 = np.zeros((3, A_g.shape[0], A_g.shape[1], A_g.shape[2]))
-    # A1[0] = A_r
-    # A1[1] = A_g
-    # A1[2] = A_b
-
-    # A2[0] = A_r2
-    # A2[1] = A_g2
-    # A2[2] = A_b2
-
     # c_g_edge = get_c_m(i_g_edge, Q, int(ac_block/2), mvs1, b)
     # C_g_edge = get_C_m(i_g_edge, Q, int(ac_block/2), mvs1, b)
-    # Ae = estimate_coefficients_motion2(c_g_edge, C_g_edge)
+    # A_g_edge = estimate_coefficients_motion2(c_g_edge, C_g_edge)
 
-    # c_g_edge2 = get_c_m(i_g_edge2, Q, int(ac_block/2), mvs2, b)
-    # C_g_edge2 = get_C_m(i_g_edge2, Q, int(ac_block/2), mvs2, b)
-    # Ae2 = estimate_coefficients_motion2(c_g_edge2, C_g_edge2)
+    # c_g_edge2 = get_c_m(i_g_edge2, Q, int(ac_block/2), mvs1, b)
+    # C_g_edge2 = get_C_m(i_g_edge2, Q, int(ac_block/2), mvs1, b)
+    # A_g_edge2 = estimate_coefficients_motion2(c_g_edge2, C_g_edge2)
 
-    #predicted = estimate_frame_motion(I1, I2, A_g, A_g2, Ae, Ae2, k_width, k_off, b, motion, mvs1, mvs2, mvs)
     predicted = estimate_frame_motion(I1, I2, A_g, A_g2, k_width, k_off, b, motion, mvs1, mvs2, mvs)
+
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
     return predicted
@@ -218,16 +182,20 @@ def main():
         image1 = '../football/image4.png'
         image2 = '../football/image5.png'
         image3 = '../football/image6.png'
-        out = '../output/out.png'
+        out = '../output/out_k.png'
         k_width = 3
         ac_block = 19
         motion = 1
+
+    niklaus = cv2.imread('../niklaus_results/football/image5.png')
+    
     print("Kernel size:", k_width)
     print("Autocorrelation kernel size:", ac_block)
     #kernel max offsets (the max index to be used)    
     print("Predicting frames")
     predicted = predict_frame_uni(image1, image3, k_width, ac_block, motion)
     print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
+    print("Niklaus is :", get_psnr(cv2.imread(image2), niklaus))
     if(cv2.imwrite(out, predicted) == False):
         print("Error writing file!")
     else:

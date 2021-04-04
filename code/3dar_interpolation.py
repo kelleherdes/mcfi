@@ -1,21 +1,27 @@
 import numpy as np
 import cv2
 import csv
+import matplotlib.pyplot as plt
 import os 
 import sys
 from numba import jit, typed, types
 import time
 from tqdm import tqdm
 from scipy import signal
-from sep_auto import generate_toeplitz, generate_ac_tensor
-import math
+from sep_auto import generate_toeplitz, ac_tensor_uni
 from motion import motion_est, motion_est2
-from cuda_auto_interp import get_c_m, get_C_m, get_c, get_C
+import math
+from cuda_auto_uni import get_c, get_C, get_c_m, get_C_m
 
-def get_psnr(image1, image2):
-    mse = np.sum((image1 - image2) ** 2)/(image1.shape[0] * image2.shape[1])
-    psnr = 10 * math.log10(255 ** 2/mse)
-    return psnr
+
+def edge_detect(image):
+    sobel = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
+    image_x = signal.convolve2d(image, sobel, mode = 'same')
+    image_y = signal.convolve2d(image, sobel.T, mode = 'same')
+    mag = np.sqrt(image_x ** 2 + image_y ** 2)
+    mag[mag > 255] = 255
+    mag[mag < 0] = 0
+    return mag.astype(np.uint8)
 
 def q_dict(Q):
     qd = typed.Dict.empty(key_type = types.UniTuple(types.int64, 2), value_type=types.int64, )
@@ -24,120 +30,23 @@ def q_dict(Q):
         qd[tuple(key)] = i
     return qd
 
-def generate_Q(width):
-    Q = np.zeros((width, width, 3))
+def get_psnr(image1, image2):
+    mse = np.sum((image1 - image2) ** 2)/(image1.shape[0] * image2.shape[1])
+    psnr = 10 * math.log10(255 ** 2/mse)
+    return psnr
+
+def generate_Q_auto(width):
+    Q = np.zeros((width, width, 2))
     #maximum offset
-    off = int((width  - (width % 2))/2)
+    off = int(width / 2)
     #e.g for a 3x3 kernel centered at current pixel max offset is 
     for i in range(0, width):
         Q[i, :, 0] = i - off
         Q[:, i, 1] = i - off
-    Q = Q.reshape((width * width, 3)).astype(np.int64)
-    Q[:, 2] = -1
+    Q = Q.reshape((width * width, 2)).astype(np.int64)
     return Q
 
-
-@jit(nopython=True)
-def make_C(x1, x2, Q, toeplitz1, toeplitz2, toeplitz3, autocor2, indices, k_size):
-    C = np.zeros((2 * k_size, 2 * k_size), dtype = np.float32) 
-    for i in range(0, k_size):
-        for j in range (0, k_size):
-            C[i, j] = toeplitz1[x1 + Q[i, 0], x2 + Q[i, 1], int(indices[i * k_size + j])]
-            C[i + k_size, j] = toeplitz2[x1 + Q[i, 0], x2 + Q[i, 1], int(indices[i * k_size + j])]
-            C[j, i + k_size] = C[i + k_size, j]
-            C[i + k_size, j + k_size] = toeplitz3[x1 + Q[i, 0], x2 + Q[i, 1], int(indices[i * k_size + j])]
-    return C
-
-def calc_a(x1, x2, Q, toeplitz1, toeplitz2, toeplitz3, autocor2, indices, k_size):
-    #autocorrelation
-    C = make_C(x1, x2, Q, toeplitz1, toeplitz2, toeplitz3, autocor2, indices, k_size)
-    #solve the Ca = -c using linear regression for each colour channel
-    c = autocor2[x1, x2]
-    a = np.linalg.lstsq(C.astype(np.float32), c.astype(np.float32))[0]
-    return a
-
-@jit(nopython=True)
-def estimate_frame(I1, I2, A, k_width, k_off, b):
-    predicted = np.zeros((A.shape[0], A.shape[1], 3))
-    #for each colour channel, use the corresponding AR coefficients to estimate future frame 
-    for channel in range(0, 3):
-        for i in range(0, A.shape[0] ):
-            for j in range(0, A.shape[1] ):
-                kernel = A[i, j, :].reshape((2 * k_width,  k_width))
-                k_sum = np.sum(kernel)
-                if(k_sum != 0):
-                   kernel = kernel/np.sum(kernel)
-                patch1 = I1[i + b - k_off: i + b + k_off + 1, j + b - k_off: j + b + k_off + 1 ,channel] 
-                patch2 = I2[i + b - k_off: i + b + k_off + 1, j + b - k_off: j + b + k_off + 1 ,channel]
-                patch = np.concatenate((patch1, patch2), axis = 0)
-                mask = kernel * patch
-                predicted[i, j, channel] = np.sum(mask)
-    return predicted
-
-@jit(nopython=True)
-def estimate_frame_motion(I1, I2, A1, A2, k_width, k_off, b, mvs):
-    predicted = np.zeros((A1.shape[0], A1.shape[1], 3))
-    #for each colour channel, use the corresponding AR coefficients to estimate future frame 
-    for channel in range(0, 3):
-        for i in range(0, A1.shape[0] ):
-            for j in range(0, A1.shape[1] ):
-                kernel_p = (A1[i, j, :]/np.sum(A1[i, j, :])).reshape((2 * k_width,  k_width))[:k_width]
-                kernel_f = (A2[i, j, :]/np.sum(A2[i, j, :])).reshape((2 * k_width,  k_width))[k_width:]
-                kernel = np.concatenate((kernel_p, kernel_f), axis = 0)
-                k_sum = np.sum(kernel)
-                if(k_sum != 0):
-                   kernel = kernel/np.sum(kernel)
-                y1 = i + mvs[i + b, j + b, 0]
-                x1 = j + mvs[i + b, j + b, 1]
-                y2 = i - mvs[i + b, j + b, 0]
-                x2 = j - mvs[i + b, j + b, 1]
-                patch1 = I1[y1 + b - k_off: y1 + b + k_off + 1, x1 + b - k_off: x1 + b + k_off + 1 ,channel] 
-                patch2 = I2[y2 + b - k_off: y2 + b + k_off + 1, x2 + b - k_off: x2 + b + k_off + 1 ,channel]
-                patch = np.concatenate((patch1, patch2), axis = 0)
-                mask = kernel * patch
-                predicted[i, j, channel] = np.sum(mask)
-    return predicted
-
-def estimate_coefficients(I, toeplitz1, toeplitz2, toeplitz3, autocor2, Q, q_d, k_width, b):  
-    A = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * k_width ** 2))
-    print("Estimating coefficients...")
-    #calculate indices to be used
-    k_size = k_width ** 2
-    indices = np.empty(k_size * k_size)
-    for i in range(0, k_size):
-        for j in range(0, k_size):
-            offset = Q[j] - Q[i]
-            indices[i * k_size + j] = q_d[(offset[0], offset[1])]
-        
-    for i in tqdm(range(0, A.shape[0])):
-        for j in range(0, A.shape[1] ):
-            A[i, j] = calc_a(i + b, j + b, Q, toeplitz1, toeplitz2, toeplitz3, autocor2, indices, k_size)
-    return A
-
-def import_video():
-    #read from config file
-    input_video, start_frame, end_frame = read_input()
-    #load video
-    video = cv2.VideoCapture(input_video)
-    #load initial frame
-    ret, frame = video.read()
-
-    if(ret == False):
-        print("Video not found, exiting")
-        return 0 
-    y_lim = frame.shape[0]
-    x_lim = frame.shape[1]
-    print("Resolution is", y_lim, "x", x_lim)
-    I = np.zeros((y_lim + 2*b, x_lim + 2*b, 3, end_frame - start_frame + 1))
-    for i in range(0, start_frame):
-        ret, frame = video.read()
-
-    for i in range(0, end_frame - start_frame + 1):        
-        I[ :, :, :, i] = cv2.copyMakeBorder(frame, b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
-        ret, frame = video.read()
-    return I
-
-def estimate_coefficients_motion(c_array, C_array):  
+def estimate_coefficients_motion2(c_array, C_array):  
     A = np.zeros(c_array.shape)
     print("Estimating coefficients...")
     for i in tqdm(range(0, A.shape[0])):
@@ -145,78 +54,145 @@ def estimate_coefficients_motion(c_array, C_array):
             A[i, j] = np.linalg.lstsq((C_array[i, j]).astype(np.float32), c_array[i,j].astype(np.float32))[0]
     return A
 
-def predict_frame(image1, image2, image3, k_width, ac_block, motion):
+def generate_Q(width):
+    Q = np.zeros((2 * width - 1, 2))
+    #maximum offset
+    off = int(width / 2)
+    #generate 1d array of offset vectors
+    #for kernel width of 3 should be [-1,0], [0,0], [1,0], [0, -1], [0,0] -- plus shape without repeating origin
+    for i in range(0, width):
+        Q[i] = np.array([i - off, 0])
+
+    for i in range(0, off):
+        Q[width + i] = np.array([0, i - off])
+    
+    for i in range(0, off):
+        Q[width + off + i] = np.array([0, i + 1])
+    Q = Q.astype(np.int64)
+    return Q
+
+@jit(nopython=True)
+def estimate_frame_motion(I1, I2, A, A2, k_width, k_off, b, motion, mvs1, mvs2, mvs):
+    #p is past, f is future
+    predicted = np.zeros((A.shape[0], A.shape[1], 3))
+    #for each colour channel, use the corresponding AR coefficients to estimate future frame 
+    for c in range(0, 3):
+        for i in range(0, A.shape[0]):
+            for j in range(0, A.shape[1]):
+
+                kernel_p                   = np.zeros((k_width, k_width))
+                a_p                         = A[i, j, 0 : 2 * k_width - 1]
+                kernel_p[:, k_off]          = a_p[ 0 : k_width]
+                kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
+                kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
+
+                kernel_f                   = np.zeros((k_width, k_width))
+                a_f                         = A2[i, j, 0 : 2 * k_width - 1]
+                kernel_f[:, k_off]          = a_f[ 0 : k_width]
+                kernel_f[k_off, 0 : k_off ] = a_f[k_width : k_width + k_off]
+                kernel_f[k_off, k_off + 1:] = a_f[k_width + k_off:]
+
+                k_sum = np.sum(kernel_p + kernel_f)
+                if(k_sum != 0):
+                   kernel_p = kernel_p/k_sum
+                   kernel_f = kernel_f/k_sum
+                
+                y1 = i + b + mvs[i + b, j + b, 0]
+                x1 = j + b + mvs[i + b, j + b, 1]
+                y2 = i + b - mvs[i + b, j + b, 0]
+                x2 = j + b - mvs[i + b, j + b, 1]
+           
+                patch1 = I1[y1 - k_off: y1 + k_off + 1, x1 - k_off: x1 + k_off + 1, c] 
+                patch2 = I2[y2 - k_off: y2 + k_off + 1, x2 - k_off: x2 + k_off + 1, c]
+                mask = kernel_p * patch1 + kernel_f * patch2
+                predicted[i, j, c] = np.sum(mask)
+
+    return predicted
+
+def predict_frame_uni(image1, image2, k_width, ac_block, motion):
+    #constants
     k_off  = int(k_width  / 2)
     max_motion = 10
     b      = int(ac_block / 2) + int(k_width / 2) + max_motion
-
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
-    I3 = cv2.copyMakeBorder(cv2.imread(image3), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
-    
+    I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
+
     Q = generate_Q(k_width)
 
-    i_g = np.zeros((I1.shape[0], I1.shape[1], 3), dtype = np.int32)
+    i_g = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     i_g[:, :, 0] = I1[:, :, 1]
-    i_g[:, :, 1] = I3[:, :, 1]
+    i_g[:, :, 1] = I2[:, :, 1]
 
-    if(motion):
-        mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
-        mvs = np.zeros(mvs.shape).astype(np.int64)
-        c_g0 = get_c_m(i_g, Q, int(ac_block/2), mvs, b, 0)
-        c_g1 = get_c_m(i_g, Q, int(ac_block/2), mvs, b, 1)
-        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
-        A1 = estimate_coefficients_motion(c_g0, C_g)
-        A2 = estimate_coefficients_motion(c_g1, C_g)
-        predicted = estimate_frame_motion(I1, I3, A1, A2, k_width, k_off, b, mvs)
+    i_g2 = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    i_g2[:, :, 1] = I1[:, :, 1]
+    i_g2[:, :, 0] = I2[:, :, 1]
+
+    # i_g_edge = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    # i_g_edge[:, :, 0] = edge_detect(i_g[:, :, 0])
+    # i_g_edge[:, :, 1] = edge_detect(i_g[:, :, 1])
+
+    # i_g_edge2 = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
+    # i_g_edge2[:, :, 1] = edge_detect(i_g[:, :, 0])
+    # i_g_edge2[:, :, 0] = edge_detect(i_g[:, :, 1])
+
+    if(motion == 1):
+        mvs1 = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
+        mvs2 = motion_est(i_g[:, :, 1], i_g[:, :, 0], b, max_motion)
+        mvs = motion_est2(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
+
+        
     else:
-        double_Q = generate_Q(2 * k_width - 1)
-        q_d = q_dict(double_Q)
-        toeplitz1_g = generate_toeplitz(i_g[:, :, 0], i_g[:, :, 0], ac_block, k_width, double_Q, b)
-        toeplitz2_g = generate_toeplitz(i_g[:, :, 2], i_g[:, :, 0], ac_block, k_width, double_Q, b)
-        toeplitz3_g = generate_toeplitz(i_g[:, :, 2], i_g[:, :, 2], ac_block, k_width, double_Q, b)
-        autocor_g  = generate_ac_tensor(i_g[:, :, 1], i_g[:, :, 0], i_g[:, :, 2], ac_block, k_width, Q, b)
-        A_g = estimate_coefficients(I2[:, :, 1], toeplitz1_g, toeplitz2_g, toeplitz3_g, autocor_g, Q, q_d, k_width, b)
-        predicted = estimate_frame(I1, I3, A_g, k_width, k_off, b)
+        mvs1 = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
+        mvs2 = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
+        mvs =  np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
+    
+    c_g = get_c_m(i_g, Q, int(ac_block/2), mvs1, b)
+    C_g = get_C_m(i_g, Q, int(ac_block/2), mvs1, b)
+    A_g = estimate_coefficients_motion2(c_g, C_g)
 
-    # with open('../kernel_output/kernel_bi_2d.npy', 'wb') as k:
-	#     np.save(k, A_g)
+    c_g2 = get_c_m(i_g2, Q, int(ac_block/2), mvs2, b)
+    C_g2 = get_C_m(i_g2, Q, int(ac_block/2), mvs2, b)
+    A_g2 = estimate_coefficients_motion2(c_g2, C_g2)
+
+    # c_g_edge = get_c_m(i_g_edge, Q, int(ac_block/2), mvs1, b)
+    # C_g_edge = get_C_m(i_g_edge, Q, int(ac_block/2), mvs1, b)
+    # A_g_edge = estimate_coefficients_motion2(c_g_edge, C_g_edge)
+
+    # c_g_edge2 = get_c_m(i_g_edge2, Q, int(ac_block/2), mvs1, b)
+    # C_g_edge2 = get_C_m(i_g_edge2, Q, int(ac_block/2), mvs1, b)
+    # A_g_edge2 = estimate_coefficients_motion2(c_g_edge2, C_g_edge2)
+
+    predicted = estimate_frame_motion(I1, I2, A_g, A_g2, k_width, k_off, b, motion, mvs1, mvs2, mvs)
+
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
     return predicted
 
 #global variables
-
-if(len(sys.argv) == 7):
-    image1 = sys.argv[1]
-    image2 = sys.argv[2]
-    image3 = sys.argv[3]
-    out = sys.argv[4]
-    k_width = int(sys.argv[5])
-    interp_type = int(sys.argv[6])
-
-elif (len(sys.argv) < 7 and len(sys.argv) >= 5):
-    image1 = sys.argv[1]
-    image2 = sys.argv[2]
-    image3 = sys.argv[3]
-    out = sys.argv[4]
-    k_width = 51
-    interp_type = 0
-
-else:
-    image1 = '../images/image0.png'
-    image2 = '../images/image1.png'
-    image3 = '../images/image2.png'
-    out = '../output/out.png'
-    k_width = 3
-    interp_type = 0
-    ac_block = 15
-
 def main():
-    print("Kernel size:", k_width)    
-    #load video frames as specified in config.txt
+    if(len(sys.argv) == 8):
+        image1 = sys.argv[1]
+        image2 = sys.argv[2]
+        image3 = sys.argv[3]
+        out = sys.argv[4]
+        k_width = int(sys.argv[5])
+        ac_block = int(sys.argv[6])
+        motion = int(sys.argv[7])
+    
+    else:
+        image1 = '../football/image4.png'
+        image2 = '../football/image5.png'
+        image3 = '../football/image6.png'
+        out = '../output/out.png'
+        k_width = 5
+        ac_block = 23
+        motion = 1
+
+    print("Kernel size:", k_width)
+    print("Autocorrelation kernel size:", ac_block)
+    #kernel max offsets (the max index to be used)    
     print("Predicting frames")
-    motion = 1
-    predicted = predict_frame(image1, image2, image3, k_width, ac_block, motion)
+    predicted = predict_frame_uni(image1, image3, k_width, ac_block, motion)
     print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
     if(cv2.imwrite(out, predicted) == False):
         print("Error writing file!")

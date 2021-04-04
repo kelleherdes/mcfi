@@ -91,18 +91,13 @@ def estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs):
     for c in range(0, 3):
         for i in range(0, A.shape[0]):
             for j in range(0, A.shape[1]):
-                kernel_p                   = np.zeros((k_width, k_width))
-                a_p                         = A[i, j, 0 : 2 * k_width - 1]
-                kernel_p[:, k_off]          = a_p[ 0 : k_width]
-                kernel_p[k_off, 0 : k_off ] = a_p[k_width : k_width + k_off]
-                kernel_p[k_off, k_off + 1:] = a_p[k_width + k_off:]
+                kernel_p                   = A[i, j].reshape((k_width, k_width))
                 k_sum = np.sum(kernel_p)
                 if(k_sum != 0):
                    kernel_p = kernel_p/k_sum
                 
                 y = i + b + mvs[i + b, j + b, 0]
                 x = j + b + mvs[i + b, j + b, 1]
-           
                 patch = I1[y - k_off: y + k_off + 1, x - k_off: x + k_off + 1, c] 
                 mask = kernel_p * patch
                 predicted[i, j, c] = np.sum(mask)
@@ -166,7 +161,7 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     
-    Q = generate_Q(k_width)
+    Q = generate_Q_auto(k_width)
 
     i_g = np.zeros((I1.shape[0], I1.shape[1], 2), dtype = np.int32)
     i_g[:, :, 0] = I1[:, :, 1]
@@ -175,17 +170,12 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     
     if(motion == 1):
         mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
-        c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
-        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
-        A_g = estimate_coefficients_motion2(c_g, C_g)
-        predicted = estimate_frame_motion(I1, A_g, k_width, k_off, b, motion, mvs)
     else:
-        double_Q = generate_Q_auto(2 * k_width - 1)
-        q_d = q_dict(double_Q)
-        toeplitz = generate_toeplitz(i_g[:, :, 0], i_g[:, :, 0], ac_block, k_width, double_Q, b)
-        autocor  = ac_tensor_uni(i_g[:, :, 0], i_g[:, :, 1],  ac_block, k_width, Q, b)
-        A = estimate_coefficients(i_g, toeplitz, autocor, Q, q_d, k_width, b)
-        predicted = estimate_frame(I1, A, k_width, k_off, b)
+        mvs = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
+    c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
+    C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
+    A_g = estimate_coefficients_motion2(c_g, C_g)
+    predicted = estimate_frame_motion(I1, A_g, k_width, k_off, b, motion, mvs)
 
     # with open('../kernel_output/kernel_uni2.npy', 'wb') as k:
 	#     np.save(k, A_g)
@@ -205,15 +195,17 @@ def main():
         motion = int(sys.argv[6])
     
     else:
-        image1 = '../images/image2.png'
+        image1 = '../images/image0.png'
         image2 = '../images/image1.png'
-        image3 = '../images/image2.png'
+        #image3 = '../images/image2.png'
         out = '../output/out.png'
-        k_width = 13
-        ac_block = 15
-        motion = 1
+        k_width = 5
+        ac_block = 11
+        motion = 0
     print("Kernel size:", k_width)
-    print("Using plus kernel and two frames...")
+    print("Using 2D kernel and one frame...")
+    #kernel max offsets (the max index to be used)    
+    
     predicted = predict_frame_uni(image1, image2, k_width, ac_block, motion)
     print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
     if(cv2.imwrite(out, predicted) == False):

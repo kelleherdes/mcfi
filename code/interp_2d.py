@@ -144,7 +144,6 @@ def estimate_coefficients_motion(c_array, C_array):
     return A
 
 def predict_frame(image1, image2, image3, k_width, ac_block, motion):
-    print("2D")
     k_off  = int(k_width  / 2)
     max_motion = 10
     b      = int(ac_block / 2) + int(k_width / 2) + max_motion
@@ -207,15 +206,16 @@ else:
     image2 = '../images/image1.png'
     image3 = '../images/image2.png'
     out = '../output/out.png'
-    k_width = 5
+    k_width = 3
     interp_type = 0
-    ac_block = 7
+    ac_block = 11
 
 def main():
-    print("Kernel size:", k_width)    
+    print("Kernel size: ", k_width)  
+    print("Using 2D kernel and two frames...")  
     #load video frames as specified in config.txt
-    print("Predicting frames")
-    motion = 1
+    print("Using 2D kernel...")
+    motion = 0
     predicted = predict_frame(image1, image2, image3, k_width, ac_block, motion)
     print("PSNR is :", get_psnr(cv2.imread(image2), predicted))
     if(cv2.imwrite(out, predicted) == False):
