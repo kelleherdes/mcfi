@@ -49,16 +49,7 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
     for k in range(0, len(ac_block)):
         for i in range(2, len(image_names)):
             print("k_width: ", k_width, "ac_block: ", ac_block[k], "image: ", path_names[i - 1])
-            if(bi_direct):
-                if(two_d):
-                    interpolated = predict_frame2d(path_names[i - 2], path_names[i - 1], path_names[i], k_width, ac_block[k], motion).astype(np.uint8)
-                else:
-                    interpolated = predict_frame(path_names[i - 2], path_names[i - 1], path_names[i], k_width, ac_block[k], motion).astype(np.uint8)
-            else:
-                if(two_d):
-                    interpolated = predict_frame_uni2d(path_names[i - 2], path_names[i - 1], k_width, ac_block[k], motion).astype(np.uint8)
-                else:
-                    interpolated = predict_frame_uni(path_names[i - 2], path_names[i - 1], k_width, ac_block[k]).astype(np.uint8)
+            interpolated = predict_frame_uni(path_names[i - 2], path_names[i - 1], k_width, ac_block[k]).astype(np.uint8)
             original = cv2.imread(path_names[i - 1])
             psnr[0, k, i - 2] = get_psnr(interpolated, original)
             psnr[1, k, i - 2] = get_psnr(interpolated[:, :, 0], original[:, :, 0])
@@ -118,60 +109,24 @@ def main():
     ##
     two_d = 1
     bi_direct = 0
-    k_width = 5
-    ac_block = [5, 7, 9, 11, 13]
     motion = 1
-    test(k_width, ac_block, motion, bi_direct, two_d)
-    ##
-    two_d = 0
-    bi_direct = 0
-    k_width = 5
+
+
+    k_width = 3
     ac_block = [5, 7, 9, 11, 13]
-    motion = 1
-    test(k_width, ac_block, motion, bi_direct, two_d)
-    ##
-    two_d = 1
-    bi_direct = 0
-    k_width = 5
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 0
-    test(k_width, ac_block, motion, bi_direct, two_d)
-    ##
-    two_d = 0
-    bi_direct = 0
-    k_width = 5
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 0
     test(k_width, ac_block, motion, bi_direct, two_d)
 
-    ##
-    two_d = 1
-    bi_direct = 0
-    k_width = 7
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 1
+    k_width = 5
+    ac_block = [7, 9, 11, 13, 15]
     test(k_width, ac_block, motion, bi_direct, two_d)
     ##
-    two_d = 0
-    bi_direct = 0
+
     k_width = 7
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 1
+    ac_block = [9, 11, 13, 15, 17]
     test(k_width, ac_block, motion, bi_direct, two_d)
-    ##
-    two_d = 1
-    bi_direct = 0
-    k_width = 7
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 5
-    test(k_width, ac_block, motion, bi_direct, two_d)
-    ##
-    two_d = 0
-    bi_direct = 0
-    k_width = 7
-    ac_block = [5, 7, 9, 11, 13]
-    motion = 5
-    test(k_width, ac_block, motion, bi_direct, two_d)
+
+
+    
 
 
 main()

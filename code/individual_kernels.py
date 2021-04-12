@@ -10,7 +10,7 @@ from matplotlib import colors
 from matplotlib.colors import Normalize
 from numpy import ma
 from tqdm import tqdm
-from matplotlib import cbook
+from matplotlib import cbook, cm
 from scipy import signal
 from motion import motion_est
 import math
@@ -78,9 +78,22 @@ class MidPointNorm(Normalize):
             else:
                 return  val*abs(vmax-midpoint) + midpoint
 
+def colour_array(a, mmin, mmax):
+    r_a = np.copy(a)
+    r_a[r_a < 0] = 0
+    r_a = ((255/mmax) * r_a).astype(np.uint8)
+    b_a = np.copy(a)
+    b_a[b_a > 0] = 0
+    b_a = abs(b_a)
+    b_a = ((255/mmax) * b_a).astype(np.uint8)
+    c_a = np.zeros((a.shape[0], a.shape[1], 3))
+    c_a[:,:,0] = r_a
+    c_a[:,:,2] = b_a 
+    c_a = c_a
+    return c_a.astype(np.uint8)
 
 def distribution(kernel, name):
-    rounded = np.round(kernel, 2)
+    rounded = np.round(kernel.flatten(), 2)
     low = np.min(rounded)
     high = np.max(rounded)
     x = np.arange(low, high + 0.01, 0.01).astype(np.float16)
@@ -92,6 +105,7 @@ def distribution(kernel, name):
     plt.figure()
     plt.title("Probability density function for " + name)
     plt.plot(x, pmf)
+    plt.savefig(dir_out + name + '_dist.png')
     
 @jit(nopython=True)
 def simple_kernel(image1, image2, x, k_width, ac_block, Q):
@@ -169,9 +183,14 @@ def get_psnr(image1, image2):
     psnr = 10 * math.log10(255 ** 2/mse)
     return psnr
 
-def get_mse_reduced(niklaus, a):
-    N = np.count_nonzero(niklaus)
-    mse = np.sum((niklaus - a) ** 2)/N
+def get_mse_reduced(n, a):
+    n1 = np.copy(n)
+    a1 =  np.copy(a)
+    n1[abs(n1) < 0.001] = 0
+    a1[n1 == 0] = 0
+    N = np.count_nonzero(n1)
+    print("Nonzero points: ", N, file = o_file)
+    mse = np.sum((n1 - a1) ** 2)/N
     return mse
 
 def get_mse(image1, image2):
@@ -220,6 +239,65 @@ def estimate_coefficients(image1, image2, Q, k_width, ac_block, b):
             A[i, j] = simple_kernel(image1, image2, np.array([i + b, j + b]).astype(np.int64), k_width, ac_block, Q)
     return A
 
+def graph(name, image, kernel, mid, i, j, X, Y, U, V, n_off):
+    c = int(51/2)
+    skip=(slice(None, None, 4),slice(None,None,4))
+    plt.figure()
+    plt.title(name)
+    plt.imshow(image[i - n_off : i + n_off + 1, j - n_off : j + n_off + 1])
+    plt.imshow(kernel[c - n_off : c + n_off + 1, c - n_off : c + n_off + 1], cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=mid), alpha=0.5)
+    plt.colorbar()
+    plt.quiver(X[skip], Y[skip], U[skip], V[skip], color = 'm', angles='xy', scale_units='xy', scale=1)
+    plt.savefig(dir_out  + name + '.png')
+
+
+def graph_truth(name, image, i, j):
+    plt.figure()
+    plt.title(name)
+    plt.imshow(image[i - 5 : i + 6, j - 5 : j + 6])
+    plt.savefig(dir_out  + name + '.png')
+
+def graph3d(name, kernel):
+    plt.figure()
+    x = y = np.arange(51)
+    X, Y = np.meshgrid(x, y)
+    plt.suptitle(name)
+    ax = plt.axes(projection='3d')
+    ax.plot_surface(X, Y, kernel, cmap = cm.CMRmap)
+
+def get_stats(n, a, name):
+    cen = int(51 / 2)
+    print("Metrics for " + name, file = o_file)
+    mse = get_mse(n, a)
+    print("MSE is: ", mse, file = o_file)
+    #reduced mse
+    mse_reduced = get_mse_reduced(n, a)
+    print("Reduced MSE is: ", mse_reduced, file = o_file)
+    sign_error = get_sign_error(n, a)
+    print("Sign error is: ", sign_error, file = o_file)
+    reduced_sign_error = get_sign_error_reduced(n, a)
+    print("Reduced sign error is: ", reduced_sign_error, file = o_file)
+    print("Niklaus centre: ", n[cen, cen], file = o_file)
+    print("3DAR centre: ", a[cen, cen], file = o_file)
+    print("3DAR max: ", np.max(a), file=o_file)
+    print("SNASC max: ", np.max(n), file=o_file)
+    print("Niklaus mean: ", np.mean(n), file = o_file)
+    print("Niklaus standard deviation: ", np.std(n), file = o_file)
+    print("Niklaus absolute sum: ", np.sum(abs(n)), file = o_file)
+    print("3DAR mean: ", np.mean(a), file = o_file)
+    print("3DAR standard deviation: ", np.std(a), file = o_file)
+    print("3DAR absolute sum", np.sum(abs(a)), file = o_file)
+    
+    n_max = np.array(np.unravel_index(np.argmax(n, axis=None), n.shape))
+    a_max = np.array(np.unravel_index(np.argmax(a, axis=None), a.shape))
+    dist = n_max - a_max
+    d_mag = np.sqrt(dist[0] ** 2 + dist[1] ** 2)
+    print("Distance between maximum points: ", d_mag, file = o_file)
+    print("#######################", file = o_file)
+
+
+dir_out = r'C:\Users\deske\OneDrive\Documents\College\MAI\new\kernel_tests\ice\motion\test4\\'
+o_file = open(dir_out + 'console_output.txt', 'w')
 #global variables
 def main():
     if(len(sys.argv) == 7):
@@ -238,19 +316,19 @@ def main():
         k_width = 51
         ac_block = 21
 
-    print("Kernel size:", k_width)
+    
+    print("Kernel size:", k_width, file=o_file)
     print("Using 2D kernel and one frame...")
     #kernel max offsets (the max index to be used)    
     b = ac_block
 
-    with open("../sepconv/horizontal.npy", 'rb') as h:
+    with open("../sepconv/ice_horizontal.npy", 'rb') as h:
         prev_h = np.load(h)
         next_h = np.load(h)
 
-    with open("../sepconv/vertical.npy", 'rb') as v:
+    with open("../sepconv/ice_vertical.npy", 'rb') as v:
         prev_v = np.load(v)
         next_v = np.load(v)
-
     
     plt.imshow(plt.imread(image1))
     point = np.asarray(plt.ginput(1, timeout = 0))
@@ -258,80 +336,62 @@ def main():
     i = int(point[0, 1])
     j = int(point[0, 0])
 
-    print(i, j)
-    cen = int(k_width / 2)
+    # i = 256
+    # j = 383
+    
+   
+    print("Points are: ", i, j, file=o_file)
+    n_off = 10
 
-    niklaus_previous = np.outer(prev_h[ :, :, i, j], prev_v[:, :, i, j])
+    n_p = np.outer(prev_h[ :, :, i, j], prev_v[:, :, i, j])
+    n_n = np.outer(next_h[ :, :, i, j], next_v[:, :, i, j])
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I3 = cv2.copyMakeBorder(cv2.imread(image3), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
+    mvs1 = motion_est(I1[:, :, 1], I2[:, :, 1], b, b)
+    mvs2 = motion_est(I3[:, :, 1], I2[:, :, 1], b, b)
+
+    Y = np.arange(21)
+    X = np.arange(21)
+    X, Y = np.meshgrid(Y, X)
+    U1 = -mvs1[i - n_off + b: i + n_off + 1 + b, j - n_off + b: j + n_off + 1 + b, 1]
+    V1 =  mvs1[i - n_off + b: i + n_off + 1 + b, j - n_off + b: j + n_off + 1 + b, 0]
+
+    U2 = -mvs2[i - n_off + b: i + n_off + 1 + b, j - n_off + b: j + n_off + 1 + b, 1]
+    V2 =  mvs2[i - n_off + b: i + n_off + 1 + b, j - n_off + b: j + n_off + 1 + b, 0]
 
     Q = generate_Q(k_width)
-    a = simple_kernel(I1, I2, np.array([i + b, j + b]), k_width, ac_block, Q).reshape((k_width, k_width))
+    a_p = simple_kernel(I1[:,:,1], I2[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((k_width, k_width))
+    a_n = simple_kernel(I3[:,:,1], I2[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((k_width, k_width))
+    a_p = a_p/2 * np.sum(a_p)
+    a_n = a_n/2 * np.sum(a_n)
+    ab = simple_kernel2(I1[:,:,1], I2[:,:,1], I3[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((2 * k_width, k_width))
+    ab_p = ab[:k_width]
+    ab_n = ab[k_width:]
+    get_stats(n_p, a_p, 'Unilateral previous')
+    get_stats(n_n, a_n, 'Unilateral next')
+    get_stats(n_p, ab_p, 'Bilateral previous')
+    get_stats(n_n, ab_n, 'Bilateral next')
+    distribution(ab_n, 'Bilateral Next')
+    distribution(ab_p, 'Bilateral Previous')
+    distribution(a_p, 'Unilateral Previous')
+    distribution(a_n, 'Unilateral Next')
+    distribution(n_n, 'Niklaus Next')
+    distribution(n_p, 'Niklaus Previous')
 
     I1 = plt.imread(image1)
     I2 = plt.imread(image2)
-    plt.figure()
-    plt.title("Niklaus ")
-    plt.imshow(I1[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
-    plt.imshow(niklaus_previous, cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=0), alpha=0.5)
-    plt.colorbar()
+    I3 = plt.imread(image3)
+    #def graph(name,image, kernel, mid):
+    graph_truth('Truth patch',       I2, i, j)
+    graph('Niklaus Previous',        I1, n_p, 0, i, j, X, Y, U1, V1, n_off)
+    graph('Niklaus Next',            I3, n_n, 0, i, j, X, Y, U2, V2, n_off)
+    graph('3DAR Unilateral Previous',I1, a_p, 0, i, j, X, Y, U1, V1, n_off)
+    graph('3DAR Unilateral Next',    I3, a_n, 0, i, j, X, Y, U2, V2, n_off)
+    graph('3DAR Bilateral Previous', I1, ab_p, 0, i, j, X, Y, U1, V1, n_off)
+    graph('3DAR Bilateral Next',     I3, ab_n, 0, i, j, X, Y, U2, V2, n_off)
 
-    plt.figure()
-    plt.title("3DAR ")
-    plt.imshow(I1[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
-    plt.imshow(a, cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=0), alpha=0.5)
-    plt.colorbar()
-    a = a/2 * np.sum(a)
-    #/////////////////////////////
-    #/////error calculation//////
-    #///////////////////////////
-    #mse
-    n1 = np.copy(niklaus_previous)
-    a1 =  np.copy(a)
-    n1[abs(n1) < 0.001] = 0
-    a1[n1 == 0] = 0
-    N = np.count_nonzero(n1)
-    print("Nonzero points: ", N)
-    mse = get_mse(niklaus_previous, a)
-    print("MSE is: ", mse)
-    #reduced mse
-    mse_reduced = get_mse_reduced(n1, a1)
-    print("Reduced MSE is: ", mse_reduced)
-    #sign error
-    sign_error = get_sign_error(a, niklaus_previous)
-    print("Sign error is: ", sign_error)
-    reduced_sign_error = get_sign_error_reduced(niklaus_previous, a)
-    print("Reduced sign error is: ", reduced_sign_error)
-    print("Niklaus centre: ", niklaus_previous[cen, cen])
-    print("3DAR centre: ", a[cen, cen])
-    print("Niklaus mean: ", np.mean(niklaus_previous))
-    print("Niklaus standard deviation: ", np.std(niklaus_previous))
-    print("Niklaus absolute sum: ", np.sum(abs(niklaus_previous)))
-    print("3DAR mean: ", np.mean(a))
-    print("3DAR standard deviation: ", np.std(a))
-    print("3DAR absolute sum", np.sum(abs(a)))
-
-    a_flatten = a.flatten()
-    n_flatten = niklaus_previous.flatten()
-    distribution(a_flatten, '3DAR')
-    distribution(n_flatten, 'Niklaus')
-
-    #/////////////////////////////
-    #///////////graphs///////////
-    #///////////////////////////
-    # plt.figure()
-    # plt.title("3DAR previous reduced")
-    # plt.imshow(I1[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
-    # plt.imshow(a1, cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=0), alpha=0.5)
-    # plt.colorbar()
-
-    # plt.figure()
-    # plt.title("Niklaus previous reduced")
-    # plt.imshow(I1[i - int(51/2) : i + int(51/2) + 1, j - int(51/2) : j + int(51/2) + 1])
-    # plt.imshow(n1, cmap='seismic', interpolation='nearest', norm=MidPointNorm(midpoint=0), alpha=0.5)
-    # plt.colorbar()
-    plt.show()
+    #plt.show()
 
 if __name__ == "__main__":
     main()
