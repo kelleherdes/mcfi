@@ -1,0 +1,2 @@
+C:\Users\deske\OneDrive\Documents\College\MAI\new\code\gpu_test\Debug\gpu_test.exe
+C:\Users\deske\OneDrive\Documents\College\MAI\new\code\gpu_test\Debug\gpu_test.pdb

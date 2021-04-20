@@ -5,13 +5,17 @@ import matplotlib.pyplot as plt
 from interp_2d import predict_frame as predict_frame2d
 from interp_uni_2d import predict_frame_uni as predict_frame_uni2d
 from interp import predict_frame
-from fourier_interp import predict_frame_uni
+from new_motion_interp import predict_frame_uni
 import math
 
 def get_psnr(image1, image2):
     mse = np.sum((image1 - image2) ** 2)/(image1.shape[0] * image2.shape[1])
     psnr = 10 * math.log10(255 ** 2/mse)
     return psnr
+
+def sign(out_dir):
+    out_file = open(out_dir + '/sign.txt', 'w')
+    out_file.write('test_fourier.py')
 
 def test(k_width, ac_block, motion, bi_direct, two_d):
     #parameters
@@ -33,8 +37,9 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
     else:
         two_str = 'plus'
 
-    os.mkdir('../graphs/ice/' + two_str + 'k' + str(k_width) + bd_string  + motion_str)
-    
+    out_dir = '../graphs/ice/' + two_str + 'kk' + str(k_width) + bd_string  + motion_str
+    os.mkdir(out_dir)
+    sign(out_dir)
 
     for i in range(2, len(image_names)):
         os.system("python ../sepconv-slomo/run.py --model lf --first " + path_names[i - 2] + " --second " + path_names[i] + " --out ../niklaus_out/out2.png")
@@ -49,7 +54,7 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
     for k in range(0, len(ac_block)):
         for i in range(2, len(image_names)):
             print("k_width: ", k_width, "ac_block: ", ac_block[k], "image: ", path_names[i - 1])
-            interpolated = predict_frame_uni(path_names[i - 2], path_names[i - 1], k_width, ac_block[k]).astype(np.uint8)
+            interpolated = predict_frame_uni(path_names[i - 2], path_names[i], k_width, ac_block[k]).astype(np.uint8)
             original = cv2.imread(path_names[i - 1])
             psnr[0, k, i - 2] = get_psnr(interpolated, original)
             psnr[1, k, i - 2] = get_psnr(interpolated[:, :, 0], original[:, :, 0])
@@ -68,7 +73,8 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
         plt.plot(x_axis, psnr[0, k, :], 'x-', label = 'block = ' + str(ac_block[k]))
     plt.plot(x_axis, niklaus_psnr[0], 'x-', label = 'niklaus')
     plt.legend()
-    plt.savefig('../graphs/ice/'  + two_str +'k' + str(k_width) + bd_string + motion_str +'/graph' + str(k_width) + motion_str + bd_string + '.png')
+    plt.grid()
+    plt.savefig(out_dir +'/graph' + str(k_width) + motion_str + bd_string + '.png')
 
     plt.figure()
     plt.title("Performance of 3DAR interpolation with various autocorrelation \n block sizes " + str(k_width) + motion_str)
@@ -78,10 +84,10 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
         plt.plot(x_axis, psnr[1, k, :], 'x-', label = 'block = ' + str(ac_block[k]))
     plt.plot(x_axis, niklaus_psnr[1], 'x-', label = 'niklaus')
     plt.legend()
-    plt.savefig('../graphs/ice/'  + two_str +'k' + str(k_width) + bd_string + motion_str+'/graph_red'+ str(k_width) + motion_str + bd_string + '.png')
+    plt.grid()
+    plt.savefig(out_dir + '/graph_red'+ str(k_width) + motion_str + bd_string + '.png')
 
     plt.figure()
-
     plt.title("Performance of 3DAR interpolation with various autocorrelation \n block sizes " + str(k_width) + motion_str)
     plt.ylabel("PSNR (green channel only)")
     plt.xlabel("Frame")
@@ -89,8 +95,8 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
         plt.plot(x_axis, psnr[2, k, :], 'x-', label = 'block = ' + str(ac_block[k]))
     plt.plot(x_axis, niklaus_psnr[2], 'x-', label = 'niklaus')
     plt.legend()
-    plt.savefig('../graphs/ice/'  + two_str +'k' + str(k_width) + bd_string + motion_str +'/graph_green' + str(k_width) + motion_str + bd_string + '.png')
-
+    plt.grid()
+    plt.savefig(out_dir +'/graph_green' + str(k_width) + motion_str + bd_string + '.png')
     plt.figure()
 
     plt.title("Performance of 3DAR interpolation with various autocorrelation \n block sizes " + str(k_width) + motion_str)
@@ -100,8 +106,8 @@ def test(k_width, ac_block, motion, bi_direct, two_d):
         plt.plot(x_axis, psnr[3, k, :], 'x-', label = 'block = ' + str(ac_block[k]))
     plt.plot(x_axis, niklaus_psnr[3], 'x-', label = 'niklaus')
     plt.legend()
-    
-    plt.savefig('../graphs/ice/'  + two_str +'k' + str(k_width) + bd_string  + motion_str +'/graph_blue'+ str(k_width) + motion_str + bd_string + '.png')
+    plt.grid()
+    plt.savefig(out_dir + '/graph_blue' + str(k_width) + motion_str + bd_string + '.png')
     plt.close()
 
 def main():
@@ -111,7 +117,6 @@ def main():
     bi_direct = 0
     motion = 1
 
-
     k_width = 3
     ac_block = [5, 7, 9, 11, 13]
     test(k_width, ac_block, motion, bi_direct, two_d)
@@ -120,7 +125,6 @@ def main():
     ac_block = [7, 9, 11, 13, 15]
     test(k_width, ac_block, motion, bi_direct, two_d)
     ##
-
     k_width = 7
     ac_block = [9, 11, 13, 15, 17]
     test(k_width, ac_block, motion, bi_direct, two_d)

@@ -213,9 +213,9 @@ def main():
         ac_block = int(sys.argv[6])
 
     else:
-        image1 = '../images/image0.png'
-        image2 = '../images/image1.png'
-        image3 = '../images/image2.png'
+        image1 = '../football/image1.png'
+        image2 = '../football/image2.png'
+        image3 = '../football/image3.png'
         out = '../output/out.png'
         k_width = 3
         ac_block = 5

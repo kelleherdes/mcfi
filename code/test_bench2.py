@@ -13,13 +13,32 @@ def get_psnr(image1, image2):
     psnr = 10 * math.log10(255 ** 2/mse)
     return psnr
 
+def sign(out_dir):
+    out_file = open(out_dir + '/sign.txt', 'w')
+    out_file.write('test_bench2.py')
+
 def test(kernel_ac, motion, bi_direct, two_d):
     #parameters
     image_names = os.listdir('../images')
     path_names = ['../images/' + image for image in image_names]
     niklaus_psnr = np.zeros((len(image_names) - 2))
-    
     psnr = np.zeros((kernel_ac.shape[0], len(image_names) - 2))
+
+    if(motion):
+        motion_str = 'motion'
+    else:
+        motion_str = ''
+    if(bi_direct):
+        bd_string = 'bi'
+    else:
+        bd_string = 'uni'
+    if(two_d):
+        two_str = '2d'
+    else:
+        two_str = 'plus'
+    out_dir = '../graphs/ice/' + two_str + 'k' + bd_string  + motion_str
+    os.mkdir(out_dir)
+    sign(out_dir)
 
 
     for i in range(2, len(image_names)):
@@ -44,20 +63,7 @@ def test(kernel_ac, motion, bi_direct, two_d):
             original = cv2.imread(path_names[i - 1])
             psnr[k, i - 2] = get_psnr(interpolated, original)
 
-    if(motion):
-        motion_str = 'motion'
-    else:
-        motion_str = ''
-    if(bi_direct):
-        bd_string = 'bi'
-    else:
-        bd_string = 'uni'
-    if(two_d):
-        two_str = '2d'
-    else:
-        two_str = 'plus'
-
-    os.mkdir('../graphs/' + two_str + 'k' + bd_string  + motion_str)
+    
     plt.figure()
     x_axis = np.arange(psnr.shape[1])
     plt.title("Performance of 3DAR interpolation with various autocorrelation \n block sizes " + motion_str)
@@ -66,36 +72,24 @@ def test(kernel_ac, motion, bi_direct, two_d):
 
     for k in range(psnr.shape[0]):
         plt.plot(x_axis, psnr[k], 'x-', label = 'kernel = ' + str(kernel_ac[k, 0]) + ' block = ' + str(kernel_ac[k, 1]))
-    plt.plot(x_axis, niklaus_psnr, 'x-', label = 'niklaus')
+    plt.plot(x_axis, niklaus_psnr, 'x-', label = 'SNASC')
     plt.legend()
-    plt.savefig('../graphs/'  + two_str +'k' + bd_string + motion_str +'/graph' + motion_str + bd_string + '.png')
+    plt.grid()
+    plt.savefig('../graphs/ice/'  + two_str +'k' + bd_string + motion_str +'/graph' + motion_str + bd_string + '.png')
     plt.close()
 
 def main():
-    kernel_ac = np.array([[3,5], [5,7], [7,9]])
     two_d = 1
-    bi_direct = 0
-    motion = 1
-    test(kernel_ac, motion, bi_direct, two_d)
 
-    kernel_ac = np.array([[3,5], [5,5], [7,7]])
-    two_d = 0
-    bi_direct = 0
-    motion = 1
-    test(kernel_ac, motion, bi_direct, two_d)
-
-    kernel_ac = np.array([[3,5], [5,7], [7,9]])
-    two_d = 1
-    bi_direct = 0
     motion = 0
-    test(kernel_ac, motion, bi_direct, two_d)
-
-    kernel_ac = np.array([[3,5], [5,5], [7,7]])
-    two_d = 0
     bi_direct = 0
-    motion = 0
+    kernel_ac = np.array([[3,5], [5,7], [7,9], [9, 11], [11, 13]])
     test(kernel_ac, motion, bi_direct, two_d)
 
+    motion = 0
+    bi_direct = 1
+    kernel_ac = np.array([[3,5], [5,7], [7,9], [9, 11], [11, 13]])
+    test(kernel_ac, motion, bi_direct, two_d)
 
 
 

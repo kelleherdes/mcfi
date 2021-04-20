@@ -72,12 +72,13 @@ def calc_a_motion(x1, x2, Q, q_motion, toeplitz, autocor, q_d, q_md, k_width, mv
 def calc_a(x1, x2, Q, toeplitz, autocor, q_d, k_width):
     #autocorrelation
     c = autocor[x1, x2]
-    q_len = 2 * k_width - 1
+    q_len = c.shape[0]
     C = np.zeros((q_len, q_len))
     for i in range(q_len):
         for j in range(q_len):
             offset = Q[j] - Q[i]
             C[i, j] = toeplitz[x1 + Q[i, 0], x2 + Q[i, 1], q_d[(offset[0], offset[1])]]
+    
     a = np.linalg.lstsq(C.astype(np.float32), c.astype(np.float32))[0]   
     return a
 
@@ -130,7 +131,7 @@ def estimate_frame(I1, A, k_width, k_off, b):
     return predicted
 
 def estimate_coefficients(I, toeplitz, autocor, Q, q_d, k_width, b):  
-    A = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, 2 * k_width - 1))
+    A = np.zeros((I.shape[0] - 2 * b, I.shape[1] - 2 * b, k_width * k_width ))
     print("Estimating coefficients...")
     for i in tqdm(range(0, A.shape[0])):
         for j in range(0, A.shape[1]):
@@ -170,15 +171,19 @@ def predict_frame_uni(image1, image2, k_width, ac_block, motion):
     
     if(motion == 1):
         mvs = motion_est(i_g[:, :, 0], i_g[:, :, 1], b, max_motion)
+        c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
+        C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
+        A = estimate_coefficients_motion2(c_g, C_g)
     else:
+        double_Q = generate_Q_auto(2 * k_width - 1)
+        q_d = q_dict(double_Q)
+        toeplitz = generate_toeplitz(i_g[:, :, 0], i_g[:, :, 0], ac_block, k_width, double_Q, b)
+        autocor = ac_tensor_uni(i_g[:, :, 0], i_g[:, :, 1], ac_block, k_width, Q, b)
+        A = estimate_coefficients(i_g, toeplitz, autocor, Q, q_d, k_width, b)
         mvs = np.zeros((i_g.shape[0], i_g.shape[1], 2), dtype = np.int64)
-    c_g = get_c_m(i_g, Q, int(ac_block/2), mvs, b)
-    C_g = get_C_m(i_g, Q, int(ac_block/2), mvs, b)
-    A_g = estimate_coefficients_motion2(c_g, C_g)
-    predicted = estimate_frame_motion(I1, A_g, k_width, k_off, b, motion, mvs)
+    
+    predicted = estimate_frame_motion(I1, A, k_width, k_off, b, motion, mvs)
 
-    # with open('../kernel_output/kernel_uni2.npy', 'wb') as k:
-	#     np.save(k, A_g)
 
     predicted[predicted > 255] = 255
     predicted[predicted < 0] = 0
@@ -199,8 +204,8 @@ def main():
         image2 = '../images/image1.png'
         #image3 = '../images/image2.png'
         out = '../output/out.png'
-        k_width = 5
-        ac_block = 11
+        k_width = 3
+        ac_block = 5
         motion = 0
     print("Kernel size:", k_width)
     print("Using 2D kernel and one frame...")

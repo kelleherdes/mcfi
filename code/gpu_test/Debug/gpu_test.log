@@ -1,0 +1,3 @@
+﻿  main.cpp
+C:\Users\deske\OneDrive\Documents\College\MAI\new\code\gpu_test\main.cpp(1,10): warning C4067: unexpected tokens following preprocessor directive - expected a newline
+  gpu_test.vcxproj -> C:\Users\deske\OneDrive\Documents\College\MAI\new\code\gpu_test\Debug\gpu_test.exe
