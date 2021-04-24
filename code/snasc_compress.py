@@ -103,11 +103,12 @@ def main():
     with open("../sepconv/fb_2_v.npy", 'rb') as v:  
         next_v = np.copy(np.load(v)[:, :, :, :])
 
-    b = 32
+    
     image1 = cv2.copyMakeBorder(cv2.imread('../football/image0.png'), b, b, b, b, cv2.BORDER_REFLECT)
     image2 = cv2.imread('../football/image1.png')
     image3 = cv2.copyMakeBorder(cv2.imread('../football/image2.png'), b, b, b, b, cv2.BORDER_REFLECT)
-    image_out = cv2.imread("../niklaus_results/fb_1.png")
+ 
+    image_out = cv2.imread("../niklaus_results/ice_1.png")
     N = 5
     v, c = compress_kernels(prev_h, next_h, prev_v, next_v, N)
     interp_c = apply_compressed_kernels(image1, image3, c, v, b, N)
@@ -119,9 +120,9 @@ def main():
     print("PSNR dnn", psnr_dnn)
     print("Compressed psnr", psnr_c)
 
-    cv2.imshow('interp_c', interp_c)
-    cv2.imshow('interp', interp)
-    cv2.imshow('DNN', image_out)
+    cv2.imshow('../meeting_22April/ice_test/interp_compressed.png', interp_c)
+    cv2.imshow('../meeting_22April/ice_test/interp.png', interp)
+    cv2.imshow('../meeting_22April/ice_test/DNN_out.png', image_out)
     cv2.waitKey(0)
 
 if __name__ == "__main__":

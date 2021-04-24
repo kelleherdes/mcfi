@@ -295,8 +295,19 @@ def get_stats(n, a, name):
     print("Distance between maximum points: ", d_mag, file = o_file)
     print("#######################", file = o_file)
 
+def get_errors(i1, i2, i3, n_p, n_n, a_p, a_n, ab, i, j, b):
+    off = int(51 / 2)
+    truth = i2[i + b, j + b, 1]
+    uni_prev = np.sum(i1[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * a_p)
+    uni_next = np.sum(i3[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * a_n)
+    bi = np.sum(i1[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * ab[:51] + i3[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * ab[51:])
+    snasc = np.sum(i1[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * n_p + i3[i + b - off : i + b + off + 1, j + b - off : j + b + off + 1, 1] * n_n)
+    print("Uni prev error", truth - uni_prev, file = o_file)
+    print("Uni next error", truth - uni_next, file = o_file)
+    print("Bi error", truth - bi, file = o_file)
+    print("SNASC error", truth - snasc, file = o_file)
 
-dir_out = r'C:\Users\deske\OneDrive\Documents\College\MAI\new\kernel_tests\ice\motion\test4\\'
+dir_out = r'C:\Users\deske\OneDrive\Documents\College\MAI\new\kernel_tests\football\motion\test3\\'
 o_file = open(dir_out + 'console_output.txt', 'w')
 #global variables
 def main():
@@ -308,43 +319,42 @@ def main():
         ac_block = int(sys.argv[5])
     
     else:
-        image1 = '../images/image0.png'
-        image2 = '../images/image1.png'
-        image3 = '../images/image2.png'
-
+        image1 = '../football/image0.png'
+        image2 = '../football/image1.png'
+        image3 = '../football/image2.png'
         out = '../output/simple_out.png'
         k_width = 51
-        ac_block = 21
-
-    
+        ac_block = 53
+        
     print("Kernel size:", k_width, file=o_file)
     print("Using 2D kernel and one frame...")
     #kernel max offsets (the max index to be used)    
     b = ac_block
+    with open("../sepconv/fb_0_h.npy", 'rb') as h:
+        prev_h = np.copy(np.load(h)[:, :, :, :])
 
-    with open("../sepconv/ice_horizontal.npy", 'rb') as h:
-        prev_h = np.load(h)
-        next_h = np.load(h)
+    with open("../sepconv/fb_2_h.npy", 'rb') as h:   
+        next_h = np.copy(np.load(h)[:, :, :, :])
 
-    with open("../sepconv/ice_vertical.npy", 'rb') as v:
-        prev_v = np.load(v)
-        next_v = np.load(v)
+    with open("../sepconv/fb_0_v.npy", 'rb') as v:
+        prev_v = np.copy(np.load(v)[:, :, :, :])
+
+    with open("../sepconv/fb_2_v.npy", 'rb') as v:  
+        next_v = np.copy(np.load(v)[:, :, :, :])
     
+
     plt.imshow(plt.imread(image1))
     point = np.asarray(plt.ginput(1, timeout = 0))
     plt.close()
     i = int(point[0, 1])
     j = int(point[0, 0])
-
-    # i = 256
-    # j = 383
     
    
     print("Points are: ", i, j, file=o_file)
     n_off = 10
 
-    n_p = np.outer(prev_h[ :, :, i, j], prev_v[:, :, i, j])
-    n_n = np.outer(next_h[ :, :, i, j], next_v[:, :, i, j])
+    n_p = np.outer(prev_v[ :, :, i, j], prev_h[:, :, i, j])
+    n_n = np.outer(next_v[ :, :, i, j], next_h[:, :, i, j])
     I1 = cv2.copyMakeBorder(cv2.imread(image1), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I2 = cv2.copyMakeBorder(cv2.imread(image2), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
     I3 = cv2.copyMakeBorder(cv2.imread(image3), b, b, b, b, cv2.BORDER_REFLECT).astype(np.int32)
@@ -363,9 +373,15 @@ def main():
     Q = generate_Q(k_width)
     a_p = simple_kernel(I1[:,:,1], I2[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((k_width, k_width))
     a_n = simple_kernel(I3[:,:,1], I2[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((k_width, k_width))
-    a_p = a_p/2 * np.sum(a_p)
-    a_n = a_n/2 * np.sum(a_n)
     ab = simple_kernel2(I1[:,:,1], I2[:,:,1], I3[:,:,1], np.array([i + b, j + b]), k_width, ac_block, Q).reshape((2 * k_width, k_width))
+
+    ab /= np.sum(ab)
+    a_p /= np.sum(a_p)
+    a_n /= np.sum(a_n)
+    get_errors(I1, I2, I3, n_p, n_n, a_p, a_n, ab, i, j, b)
+
+    a_p = a_p/(2 * np.sum(n_p))
+    a_n = a_n/(2 * np.sum(n_n))
     ab_p = ab[:k_width]
     ab_n = ab[k_width:]
     get_stats(n_p, a_p, 'Unilateral previous')
@@ -376,16 +392,16 @@ def main():
     distribution(ab_p, 'Bilateral Previous')
     distribution(a_p, 'Unilateral Previous')
     distribution(a_n, 'Unilateral Next')
-    distribution(n_n, 'Niklaus Next')
-    distribution(n_p, 'Niklaus Previous')
+    distribution(n_n, 'SNASC Next')
+    distribution(n_p, 'SNASC Previous')
 
     I1 = plt.imread(image1)
     I2 = plt.imread(image2)
     I3 = plt.imread(image3)
     #def graph(name,image, kernel, mid):
     graph_truth('Truth patch',       I2, i, j)
-    graph('Niklaus Previous',        I1, n_p, 0, i, j, X, Y, U1, V1, n_off)
-    graph('Niklaus Next',            I3, n_n, 0, i, j, X, Y, U2, V2, n_off)
+    graph('SNASC Previous',        I1, n_p, 0, i, j, X, Y, U1, V1, n_off)
+    graph('SNASC Next',            I3, n_n, 0, i, j, X, Y, U2, V2, n_off)
     graph('3DAR Unilateral Previous',I1, a_p, 0, i, j, X, Y, U1, V1, n_off)
     graph('3DAR Unilateral Next',    I3, a_n, 0, i, j, X, Y, U2, V2, n_off)
     graph('3DAR Bilateral Previous', I1, ab_p, 0, i, j, X, Y, U1, V1, n_off)
